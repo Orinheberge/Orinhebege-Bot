@@ -44,7 +44,7 @@ const Database = {
             statusMessageId: null,
             levelupChannel: null,
             xpMessage: 15,
-            xpVoice: 10,
+            xpVoice: 15,
             xpMessageCooldown: 60,
             maxLevel: 5000,
             levelRoles: {}
