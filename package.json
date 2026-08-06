@@ -1,0 +1,30 @@
+{
+  "name": "orinstone-discord-bot",
+  "version": "1.0.0",
+  "description": "Bot Discord Orinstone - Tickets, modération, niveaux, statut des services et commandes fun",
+  "main": "bot.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node bot.js",
+    "dev": "nodemon bot.js"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "tickets",
+    "moderation",
+    "levels",
+    "orinstone"
+  ],
+  "author": "Orinstone",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}
