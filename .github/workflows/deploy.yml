@@ -1,0 +1,185 @@
+name: Deploy Bot to Production & Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    outputs:
+      commit_sha: ${{ steps.vars.outputs.sha }}
+      commit_msg: ${{ steps.vars.outputs.msg }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set Output Variables
+        id: vars
+        run: |
+          echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "msg=$(git log -1 --pretty=%s)" >> $GITHUB_OUTPUT
+
+      - name: Install rsync & sshpass
+        run: sudo apt-get install -y rsync sshpass
+
+      - name: Deploy via rsync
+        env:
+          SSH_PASS: ${{ secrets.SSH_PASSWORD }}
+        run: |
+          sshpass -p "$SSH_PASS" rsync -avz --delete \
+            --exclude='.git/' \
+            --exclude='.env' \
+            --exclude='node_modules/' \
+            --exclude='*.log' \
+            --exclude='database.json' \
+            --exclude='warns.json' \
+            --exclude='levels.json' \
+            --exclude='config.json' \
+            -e "ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10" \
+            ./ \
+            root@5.48.143.126:/var/lib/pterodactyl/volumes/8e4cb01d-97ad-42f7-a9c8-9e21c859d26b/
+
+      - name: Post-deploy (npm install, permissions, restart bot)
+        env:
+          SSH_PASS: ${{ secrets.SSH_PASSWORD }}
+          PTERO_API_KEY: ${{ secrets.PTERO_API_KEY }}
+          PTERO_SERVER_ID: ${{ secrets.PTERO_SERVER_ID }}
+        run: |
+          # Installation des dépendances et permissions
+          sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no \
+            root@5.48.143.126 bash -s <<'REMOTE'
+          cd /var/lib/pterodactyl/volumes/8e4cb01d-97ad-42f7-a9c8-9e21c859d26b
+          
+          # Vérifier que package.json existe
+          if [ ! -f "package.json" ]; then
+              echo "❌ package.json introuvable !"
+              exit 1
+          fi
+          
+          # Installer les dépendances en production
+          npm ci --omit=dev --no-audit --no-fund 2>/dev/null || npm install --omit=dev --no-audit --no-fund
+          
+          # Permissions correctes pour le conteneur Pterodactyl
+          chown -R 1000:1000 /var/lib/pterodactyl/volumes/8e4cb01d-97ad-42f7-a9c8-9e21c859d26b
+          chmod -R 755 /var/lib/pterodactyl/volumes/8e4cb01d-97ad-42f7-a9c8-9e21c859d26b
+          
+          # Protéger les fichiers de données (ne pas écraser par le déploiement)
+          for f in database.json warns.json levels.json config.json; do
+              if [ -f "$f" ]; then
+                  chmod 644 "$f"
+                  echo "✅ $f protégé"
+              fi
+          done
+          
+          echo "✅ Déploiement des fichiers terminé"
+          REMOTE
+
+          # Redémarrer le serveur via l'API Pterodactyl
+          echo "🔄 Redémarrage du serveur Pterodactyl..."
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${PTERO_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{"signal": "restart"}' \
+            "https://panel.orinstone.deepstone.fr/api/client/servers/${PTERO_SERVER_ID}/power")
+
+          if [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ Serveur redémarré avec succès (HTTP $HTTP_CODE)"
+          else
+              echo "⚠️ Réponse API Pterodactyl: HTTP $HTTP_CODE"
+              echo "Tentative de restart via SSH..."
+              sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no \
+                root@5.48.143.126 bash -s <<'REMOTE_SSH'
+              # Méthode fallback : trouver et tuer le processus node du bot
+              CONTAINER_ID=$(docker ps --filter "label=com.docker.compose.project=pterodactyl" \
+                --format "{{.ID}}" | head -1)
+              
+              if [ -n "$CONTAINER_ID" ]; then
+                  docker exec "$CONTAINER_ID" pkill -f "node.*bot\|node.*server\|node.*index" 2>/dev/null || true
+                  echo "✅ Processus node arrêté dans le conteneur (le watchdog Pterodactyl le relancera)"
+              else
+                  echo "⚠️ Conteneur non trouvé, vérifiez manuellement"
+              fi
+          REMOTE_SSH
+          fi
+
+  release_and_notify:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Bump version and create Tag
+        id: tag_version
+        uses: mathieudutour/github-tag-action@v6.1
+        with:
+          github_token: ${{ secrets.GH_TOKEN }}
+          tag_prefix: "v"
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.tag_version.outputs.new_tag }}
+          release_name: Release ${{ steps.tag_version.outputs.new_tag }}
+          body: |
+            ## 🤖 Déploiement Bot Discord
+
+            **Version:** `${{ steps.tag_version.outputs.new_tag }}`
+            **Commit:** `${{ needs.deploy.outputs.commit_sha }}`
+            **Message:** ${{ needs.deploy.outputs.commit_msg }}
+
+            ### 📋 Changelog récent :
+            $(git log ${{ steps.tag_version.outputs.previous_tag }}..HEAD --pretty=format:"- %s (%h)" --reverse)
+
+            ### 🎯 Cible
+            Volume Pterodactyl: `8e4cb01d-97ad-42f7-a9c8-9e21c859d26b`
+          draft: false
+          prerelease: false
+
+      - name: Notify Discord
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          RELEASE_TAG: ${{ steps.tag_version.outputs.new_tag }}
+          RELEASE_URL: ${{ steps.create_release.outputs.html_url }}
+          COMMIT_MSG: ${{ needs.deploy.outputs.commit_msg }}
+          COMMIT_SHA: ${{ needs.deploy.outputs.commit_sha }}
+        run: |
+          PAYLOAD=$(jq -n \
+            --arg title "🤖 Bot Discord Déployé" \
+            --arg desc "Version **${RELEASE_TAG}** déployée avec succès sur Pterodactyl." \
+            --arg url "${RELEASE_URL}" \
+            --arg commit "${COMMIT_MSG}" \
+            --arg sha "${COMMIT_SHA}" \
+            '{
+              embeds: [{
+                title: $title,
+                description: $desc,
+                url: $url,
+                color: 3066993,
+                fields: [
+                  { name: "📝 Commit", value: $commit, inline: true },
+                  { name: "🔖 Version", value: $sha, inline: true },
+                  { name: "🔗 Release", value: $url }
+                ],
+                footer: { text: "GitHub Actions → Pterodactyl Auto-Deploy" },
+                timestamp: now
+              }]
+            }')
+
+          curl -sf -H "Content-Type: application/json" -X POST -d "$PAYLOAD" "$DISCORD_WEBHOOK" \
+            && echo "✅ Notification Discord envoyée" \
+            || echo "⚠️ Échec notification Discord"
