@@ -1,0 +1,52 @@
+{
+  "title": "📜 Règlement Officiel — OrinHéberge",
+  "description": "Bienvenue sur le serveur officiel d'**OrinHéberge**. En rejoignant notre communauté, vous acceptez sans réserve le présent règlement.\n\n> ⚠️ **Le non-respect des règles entraînera des sanctions progressives (avertissement, mute, ban).**",
+  "color": 5814783,
+  "thumbnail": "https://heberge.orinstone.deepstone.fr/favicon.png",
+  "fields": [
+    {
+      "name": "🌍 1. Respect & Communauté",
+      "value": "• Respect mutuel obligatoire, aucune discrimination.\n• Tolérance zéro : racisme, homophobie, sexisme, haine.\n• Conflits privés uniquement, jamais en public.\n• Langage correct et lisible pour faciliter le support.",
+      "inline": true
+    },
+    {
+      "name": "💬 2. Salons & Communication",
+      "value": "• Utilisez les salons dédiés (Web, Gaming, Support).\n• Pas de spam, flood, emojis/GIFs abusifs.\n• Support : fournissez logs/erreurs directement.\n• Auto-promotion et concurrence interdites.",
+      "inline": true
+    },
+    {
+      "name": "🔊 3. Vocal & 🔞 4. Contenu Interdit",
+      "value": "**Vocal :** Pas de soundboard abusive, troll ou musique forte.\n**Interdit :** NSFW, virus/malwares, cheats, doxxing, phishing, arnaques, contenu illégal.",
+      "inline": false
+    },
+    {
+      "name": "🖥️ 5. Hébergement & Services Techniques",
+      "value": "**Technos :** Node.js • Python • Java • PHP • Azuriom\n**Jeux :** Minecraft • Terraria • Hytale • FiveM\n\n• Usage légal uniquement, pas d'abus de ressources.\n• Attaques DDoS/intrusions = **BAN définitif**.\n• Vous êtes responsable de votre contenu hébergé.\n• Plugins/themes piratés (Azuriom) et serveurs crackés interdits.",
+      "inline": false
+    },
+    {
+      "name": "👑 6. Staff & Sanctions",
+      "value": "• Le staff sanctionne tout comportement nuisible.\n• Contournement de sanction = **BAN définitif**.\n• Arnaque/usurpation envers le staff = sanction immédiate.\n• Support technique via tickets uniquement, pas de MP.",
+      "inline": true
+    },
+    {
+      "name": "📢 7. Publicité & Partenariats",
+      "value": "• Pub en MP strictement interdite.\n• Promotion d'hébergeurs concurrents prohibée.\n• Partenariats via salon/ticket dédié uniquement.",
+      "inline": true
+    },
+    {
+      "name": "🔒 8. Confidentialité & Sécurité",
+      "value": "• Ne partagez JAMAIS mots de passe, clés API ou tokens.\n• OrinHéberge ne demandera jamais votre mot de passe.\n• Activez l'**A2F** sur Discord et votre panel.\n• En cas de fuite suspectée : changez vos accès + ticket.",
+      "inline": false
+    },
+    {
+      "name": "⚖️ 9. Conditions Générales",
+      "value": "• Règlement modifiable à tout moment sans préavis.\n• « Je ne savais pas » n'est pas une excuse valable.\n• Votre présence vaut acceptation des règles + CGV/CGU.",
+      "inline": false
+    }
+  ],
+  "footer": {
+    "text": "❤️ Merci de respecter la communauté OrinHéberge | 🚀 Bonne expérience parmi nous !"
+  },
+  "timestamp": true
+}

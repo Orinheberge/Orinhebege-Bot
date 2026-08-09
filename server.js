@@ -24,6 +24,21 @@ const DB_PATH = path.join(__dirname, 'database.json');
 const WARNS_PATH = path.join(__dirname, 'warns.json');
 const LEVELS_PATH = path.join(__dirname, 'levels.json');
 
+// --- CHARGEMENT DU RÈGLEMENT ---
+const REGLEMENT_PATH = path.join(__dirname, 'reglement.json');
+let reglementData = null;
+
+try {
+    if (fs.existsSync(REGLEMENT_PATH)) {
+        reglementData = JSON.parse(fs.readFileSync(REGLEMENT_PATH, 'utf-8'));
+        console.log('✅ Règlement chargé avec succès');
+    } else {
+        console.warn('⚠️ Fichier reglement.json introuvable');
+    }
+} catch (e) {
+    console.error('Erreur de chargement du règlement:', e);
+}
+
 // --- SYSTÈME DE BASE DE DONNÉES JSON ---
 const Database = {
     load() {
@@ -48,7 +63,7 @@ const Database = {
             xpMessageCooldown: 60,
             maxLevel: 5000,
             levelRoles: {},
-            autoRole: null // ✅ NOUVEAU : Rôle auto à l'arrivée
+            autoRole: null
         };
     },
     save(data) {
@@ -244,9 +259,10 @@ const client = new Client({
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildVoiceStates
+        GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.GuildMessageReactions
     ],
-    partials: [Partials.Channel, Partials.Message, Partials.User, Partials.GuildMember]
+    partials: [Partials.Channel, Partials.Message, Partials.User, Partials.GuildMember, Partials.Reaction]
 });
 
 // --- GESTION DES ERREURS GLOBALES ---
@@ -683,7 +699,6 @@ const slashCommands = [
         .setName('removelevelrole')
         .setDescription('Retire un rôle de récompense')
         .addIntegerOption(opt => opt.setName('niveau').setDescription('Niveau à retirer').setRequired(true)),
-    // ✅ NOUVEAU : Commande pour définir l'auto-rôle
     new SlashCommandBuilder()
         .setName('setautorole')
         .setDescription('Définit le rôle automatique à donner aux nouveaux membres')
@@ -762,6 +777,9 @@ const slashCommands = [
     new SlashCommandBuilder()
         .setName('help')
         .setDescription('Affiche l\'aide générale du bot'),
+    new SlashCommandBuilder()
+        .setName('reglement')
+        .setDescription('Affiche le règlement officiel du serveur'),
     new SlashCommandBuilder()
         .setName('site')
         .setDescription('Affiche le lien vers notre site web'),
@@ -843,7 +861,7 @@ client.on('interactionCreate', async (interaction) => {
                     },
                     { 
                         name: "ℹ️ Informations",
-                        value: "`/help` `/site` `/ping` `/avatar` `/status` `/botstatus`",
+                        value: "`/help` `/site` `/ping` `/avatar` `/status` `/botstatus` `/reglement`",
                         inline: true
                     },
                     { 
@@ -1541,11 +1559,9 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.reply(`✅ Rôle de récompense pour le niveau **${level}** supprimé.`);
         }
 
-        // ✅ NOUVEAU : Commande pour définir l'auto-rôle
         if (command === 'setautorole') {
             const role = interaction.options.getRole('role');
             
-            // Vérification que le bot peut attribuer ce rôle
             const botMember = interaction.guild.members.me;
             if (role.position >= botMember.roles.highest.position) {
                 return interaction.reply({ 
@@ -1578,7 +1594,6 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.reply({ embeds: [embed] });
         }
 
-        // ✅ MODIFIÉ : Setup avec deux boutons (Support + Bug & Report)
         if (command === 'setup') {
             const embed = new EmbedBuilder()
                 .setTitle("🎫 Support - Ouverture de Ticket")
@@ -1608,7 +1623,6 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.reply({ content: '✅ Panneau de ticket envoyé !', ephemeral: true });
         }
 
-        // ✅ MODIFIÉ : help-admin avec auto-rôle
         if (command === 'help-admin') {
             const ticketCategory = Database.get('ticketCategory');
             const transcriptChannel = Database.get('transcriptChannel');
@@ -1636,7 +1650,7 @@ client.on('interactionCreate', async (interaction) => {
                     { name: "🏆 Niveaux", value: "`/addlevelrole` `/removelevelrole` `/resetrank`", inline: false },
                     { name: "🔨 Modération", value: "`/ban` `/kick` `/warn` `/clear` `/transfert` `/warnings`", inline: false },
                     { name: "📊 Statut", value: "`/status` `/refresh-status` `/botstatus`", inline: false },
-                    { name: "ℹ️ Infos", value: "`/help` `/site` `/help-admin`", inline: false },
+                    { name: "ℹ️ Infos", value: "`/help` `/site` `/help-admin` `/reglement`", inline: false },
                     { 
                         name: "📊 État", 
                         value: 
@@ -1654,6 +1668,37 @@ client.on('interactionCreate', async (interaction) => {
                 .setTimestamp();
 
             return interaction.reply({ embeds: [embed], ephemeral: true });
+        }
+
+        // ============ COMMANDE RÈGLEMENT ============
+        if (command === 'reglement') {
+            if (!reglementData) {
+                return interaction.reply({ 
+                    content: '❌ Le règlement n\'est pas configuré (fichier `reglement.json` manquant).', 
+                    ephemeral: true 
+                });
+            }
+
+            const embed = createReglementEmbed();
+            if (!embed) {
+                return interaction.reply({ 
+                    content: '❌ Erreur lors de la génération du règlement.', 
+                    ephemeral: true 
+                });
+            }
+
+            // Envoi du message et récupération de l'objet message
+            const reply = await interaction.reply({ 
+                embeds: [embed], 
+                fetchReply: true 
+            });
+
+            // Ajout de la réaction avec l'emoji personnalisé
+            try {
+                await reply.react('1535995172419272774');
+            } catch (error) {
+                console.error('Erreur ajout réaction règlement:', error);
+            }
         }
 
     } catch (error) {
@@ -1731,7 +1776,7 @@ client.on('interactionCreate', async (interaction) => {
             }
         }
 
-        // ✅ NOUVEAU : TICKET BUG & REPORT
+        // ===== TICKET BUG & REPORT =====
         if (interaction.customId === 'create_bug_ticket') {
             await interaction.deferReply({ ephemeral: true });
 
@@ -1908,7 +1953,7 @@ function startStatusInterval() {
     }, 5 * 60 * 1000);
 }
 
-// ✅ MODIFIÉ : JOIN avec auto-rôle
+// --- JOIN avec auto-rôle ---
 client.on('guildMemberAdd', async (member) => {
     // --- SYSTÈME AUTO-RÔLE ---
     const autoRoleId = Database.get('autoRole');
@@ -1921,7 +1966,6 @@ client.on('guildMemberAdd', async (member) => {
                 });
                 console.log(`[AUTO-ROLE] ✅ Rôle "${role.name}" attribué à ${member.user.tag}`);
                 
-                // Log optionnel dans le salon des logs
                 const logEmbed = new EmbedBuilder()
                     .setTitle("🎭 Auto-Rôle Attribué")
                     .setDescription(`Le rôle ${role} a été attribué automatiquement à ${member}.`)
@@ -2092,6 +2136,34 @@ client.on('roleUpdate', (oldRole, newRole) => {
         .setColor(0xe67e22)
         .setTimestamp();
     sendLog(newRole.guild, embed);
+});
+
+// --- GESTION DES RÉACTIONS ---
+client.on('messageReactionAdd', async (reaction, user) => {
+    if (user.bot) return;
+    
+    // Si la réaction est partielle, on la récupère
+    if (reaction.partial) {
+        try {
+            await reaction.fetch();
+        } catch (error) {
+            console.error('Erreur fetch réaction:', error);
+            return;
+        }
+    }
+
+    // Vérifie que c'est notre emoji sur un message du bot
+    if (reaction.emoji.id === '1535995172419272774' && reaction.message.author.id === client.user.id) {
+        console.log(`${user.tag} a réagi au règlement !`);
+        
+        // Optionnel : envoyer un log
+        const logEmbed = new EmbedBuilder()
+            .setTitle("📜 Règlement Accepté")
+            .setDescription(`${user} a accepté le règlement.`)
+            .setColor(0x2ecc71)
+            .setTimestamp();
+        sendLog(reaction.message.guild, logEmbed);
+    }
 });
 
 // --- LANCEMENT ---
