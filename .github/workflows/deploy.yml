@@ -42,6 +42,7 @@ jobs:
             --exclude='database.json' \
             --exclude='warns.json' \
             --exclude='levels.json' \
+            --exclude='reglement.json' \
             --exclude='config.json' \
             -e "ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10" \
             ./ \
