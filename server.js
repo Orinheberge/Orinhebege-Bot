@@ -47,7 +47,8 @@ const Database = {
             xpVoice: 15,
             xpMessageCooldown: 60,
             maxLevel: 5000,
-            levelRoles: {}
+            levelRoles: {},
+            autoRole: null // ✅ NOUVEAU : Rôle auto à l'arrivée
         };
     },
     save(data) {
@@ -173,10 +174,9 @@ const LevelDB = {
             data[key].lastMessageXP = Date.now();
         } else if (type === 'voice') {
             data[key].voiceXP += xp;
-            data[key].voiceTime += 60; // 1 minute
+            data[key].voiceTime += 60;
         }
 
-        // Calcul du nouveau niveau
         const newLevel = this.calculateLevel(data[key].xp);
         data[key].level = Math.min(newLevel, maxLevel);
 
@@ -266,7 +266,6 @@ client.on('messageCreate', async (message) => {
     const cooldownKey = `${message.guild.id}-${message.author.id}`;
     const now = Date.now();
     
-    // Vérifier le cooldown
     if (messageCooldowns.has(cooldownKey)) {
         const lastTime = messageCooldowns.get(cooldownKey);
         if (now - lastTime < cooldown * 1000) {
@@ -291,11 +290,10 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-// --- SYSTÈME DE NIVEAUX - GESTION DU VOCAL (CORRIGÉ) ---
+// --- SYSTÈME DE NIVEAUX - GESTION DU VOCAL ---
 let voiceInterval = null;
 
 function startVoiceXPSystem() {
-    // Nettoyer l'intervalle existant si nécessaire
     if (voiceInterval) {
         clearInterval(voiceInterval);
         voiceInterval = null;
@@ -311,42 +309,29 @@ function startVoiceXPSystem() {
         
         for (const guild of client.guilds.cache.values()) {
             try {
-                // Vérifier que le bot peut voir les voice states
                 if (!guild.voiceStates) continue;
                 
                 const voiceStates = guild.voiceStates.cache;
                 
                 for (const [userId, voiceState] of voiceStates) {
                     try {
-                        // Ignorer les bots
                         if (!voiceState.member || voiceState.member.user.bot) continue;
-                        
-                        // Ignorer les utilisateurs mute/deaf (self ou serveur)
                         if (voiceState.selfDeaf || voiceState.selfMute) continue;
                         if (voiceState.serverDeaf || voiceState.serverMute) continue;
-                        
-                        // Ignorer si pas dans un salon vocal
                         if (!voiceState.channel) continue;
-                        
-                        // Ignorer si le canal est AFK (optionnel)
                         if (guild.afkChannelId && voiceState.channelId === guild.afkChannelId) continue;
                         
                         const userData = LevelDB.getUser(userId, guild.id);
-                        
-                        // Ignorer si niveau max atteint
                         if (userData.level >= maxLevel) continue;
                         
-                        // XP aléatoire entre 80% et 120%
                         const randomXP = Math.floor(xpAmount * (0.8 + Math.random() * 0.4));
                         const result = LevelDB.addXP(userId, guild.id, randomXP, 'voice');
                         
                         console.log(`[VOCAL XP] ${voiceState.member.user.tag} a gagné ${randomXP} XP (Niveau ${result.newLevel})`);
                         
-                        // Notification de level up et application des rôles
                         if (result.leveledUp) {
                             await applyLevelRoles(guild, voiceState.member, result.newLevel);
                             
-                            // Envoyer notification dans le salon de level up si configuré
                             const levelupChannelId = Database.get('levelupChannel');
                             if (levelupChannelId) {
                                 const channel = guild.channels.cache.get(levelupChannelId);
@@ -374,7 +359,7 @@ function startVoiceXPSystem() {
                 console.error(`[VOCAL XP] Erreur guild ${guild.id}:`, guildErr);
             }
         }
-    }, 60 * 1000); // Toutes les minutes
+    }, 60 * 1000);
     
     console.log('✅ Système d\'XP vocal démarré (vérification toutes les minutes)');
 }
@@ -432,7 +417,7 @@ async function applyLevelRoles(guild, member, level) {
     }
 }
 
-// --- SYSTÈME DE STATUT DU BOT (change toutes les 15 minutes) ---
+// --- SYSTÈME DE STATUT DU BOT ---
 const botStatuses = [
     { type: 'WATCHING', text: () => `${client.guilds.cache.size} serveur(s)` },
     { type: 'PLAYING', text: () => `avec ${client.users.cache.size} membres` },
@@ -485,7 +470,6 @@ async function updateBotStatus() {
         }
         
         console.log(`📊 Statut du bot mis à jour : ${status.type} ${text}`);
-        
         currentStatusIndex = (currentStatusIndex + 1) % botStatuses.length;
     } catch (error) {
         console.error('Erreur mise à jour statut bot:', error);
@@ -502,9 +486,9 @@ function startBotStatusRotation() {
 function checkURL(url) {
     return new Promise((resolve) => {
         const start = Date.now();
-        const client = url.startsWith('https') ? https : http;
+        const clientHttp = url.startsWith('https') ? https : http;
         
-        const req = client.get(url, { timeout: 5000 }, (res) => {
+        const req = clientHttp.get(url, { timeout: 5000 }, (res) => {
             const responseTime = Date.now() - start;
             res.on('data', () => {});
             res.on('end', () => {
@@ -699,6 +683,11 @@ const slashCommands = [
         .setName('removelevelrole')
         .setDescription('Retire un rôle de récompense')
         .addIntegerOption(opt => opt.setName('niveau').setDescription('Niveau à retirer').setRequired(true)),
+    // ✅ NOUVEAU : Commande pour définir l'auto-rôle
+    new SlashCommandBuilder()
+        .setName('setautorole')
+        .setDescription('Définit le rôle automatique à donner aux nouveaux membres')
+        .addRoleOption(opt => opt.setName('role').setDescription('Le rôle à attribuer automatiquement').setRequired(true)),
     new SlashCommandBuilder()
         .setName('setup')
         .setDescription('Envoie le panneau de création de ticket'),
@@ -821,10 +810,9 @@ client.once('ready', async () => {
         console.error('Erreur enregistrement slash commands:', error);
     }
 
-    // Démarrer tous les systèmes
     startStatusInterval();
     startBotStatusRotation();
-    startVoiceXPSystem(); // ✅ Démarrer le système d'XP vocal
+    startVoiceXPSystem();
     
     console.log('🚀 Tous les systèmes sont démarrés !');
 });
@@ -960,7 +948,6 @@ client.on('interactionCreate', async (interaction) => {
                 else medal = `**#${rank}**`;
                 
                 const displayName = member ? member.displayName : `Utilisateur inconnu`;
-                const mention = member ? `<@${user.userId}>` : `ID: ${user.userId}`;
                 
                 description += `${medal} **${displayName}**\n`;
                 description += `└ Niveau **${user.level}** • ${user.xp.toLocaleString()} XP • ${user.totalMessages.toLocaleString()} msgs\n\n`;
@@ -1234,7 +1221,6 @@ client.on('interactionCreate', async (interaction) => {
         }
 
         // ============ COMMANDES MODÉRATION ============
-
         if (command === 'ban') {
             if (!interaction.member.permissions.has(PermissionFlagsBits.BanMembers)) {
                 return interaction.reply({ content: '❌ Permissions insuffisantes.', ephemeral: true });
@@ -1555,24 +1541,74 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.reply(`✅ Rôle de récompense pour le niveau **${level}** supprimé.`);
         }
 
+        // ✅ NOUVEAU : Commande pour définir l'auto-rôle
+        if (command === 'setautorole') {
+            const role = interaction.options.getRole('role');
+            
+            // Vérification que le bot peut attribuer ce rôle
+            const botMember = interaction.guild.members.me;
+            if (role.position >= botMember.roles.highest.position) {
+                return interaction.reply({ 
+                    content: `❌ Je ne peux pas attribuer le rôle **${role.name}** car il est plus haut ou égal à mon rôle le plus haut dans la hiérarchie.`, 
+                    ephemeral: true 
+                });
+            }
+            
+            if (!role.editable) {
+                return interaction.reply({ 
+                    content: `❌ Je n'ai pas la permission de modifier/attribuer le rôle **${role.name}**.`, 
+                    ephemeral: true 
+                });
+            }
+            
+            Database.set('autoRole', role.id);
+            
+            const embed = new EmbedBuilder()
+                .setTitle("🎭 Auto-Rôle Configuré")
+                .setDescription(`Les nouveaux membres recevront automatiquement le rôle **${role}** en rejoignant le serveur.`)
+                .setColor(0x2ecc71)
+                .addFields(
+                    { name: "📋 Rôle", value: `${role} (\`${role.id}\`)`, inline: true },
+                    { name: "👥 Position", value: `${role.position}`, inline: true },
+                    { name: "🎨 Couleur", value: `${role.hexColor}`, inline: true }
+                )
+                .setTimestamp();
+            
+            sendLog(interaction.guild, embed);
+            return interaction.reply({ embeds: [embed] });
+        }
+
+        // ✅ MODIFIÉ : Setup avec deux boutons (Support + Bug & Report)
         if (command === 'setup') {
             const embed = new EmbedBuilder()
                 .setTitle("🎫 Support - Ouverture de Ticket")
-                .setDescription("Cliquez sur le bouton ci-dessous pour ouvrir un ticket.")
-                .setColor(0x3498db);
+                .setDescription(
+                    "**Comment pouvons-nous vous aider ?**\n\n" +
+                    "📩 **Support général** : Cliquez sur `Ouvrir un ticket` pour toute demande d'aide.\n" +
+                    "🐛 **Bug & Report** : Cliquez sur `Signaler un bug` pour signaler un problème technique."
+                )
+                .setColor(0x3498db)
+                .setFooter({ text: `${interaction.guild.name} - Support` })
+                .setTimestamp();
 
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId('create_ticket')
                     .setLabel('Ouvrir un ticket')
                     .setEmoji('📩')
-                    .setStyle(ButtonStyle.Primary)
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                    .setCustomId('create_bug_ticket')
+                    .setLabel('Signaler un bug')
+                    .setEmoji('🐛')
+                    .setStyle(ButtonStyle.Danger)
             );
 
             await interaction.channel.send({ embeds: [embed], components: [row] });
             return interaction.reply({ content: '✅ Panneau de ticket envoyé !', ephemeral: true });
         }
 
+        // ✅ MODIFIÉ : help-admin avec auto-rôle
         if (command === 'help-admin') {
             const ticketCategory = Database.get('ticketCategory');
             const transcriptChannel = Database.get('transcriptChannel');
@@ -1581,22 +1617,39 @@ client.on('interactionCreate', async (interaction) => {
             const logsChannel = Database.get('logsChannel');
             const statusChannel = Database.get('statusChannel');
             const levelupChannel = Database.get('levelupChannel');
+            const autoRole = Database.get('autoRole');
 
             const status = (id) => id ? '✅' : '❌';
+            
+            let autoRoleInfo = 'Non configuré';
+            if (autoRole) {
+                const role = interaction.guild.roles.cache.get(autoRole);
+                autoRoleInfo = role ? `${role.name}` : 'Rôle introuvable';
+            }
 
             const embed = new EmbedBuilder()
                 .setTitle("🛠️ Aide - Administration")
                 .setDescription("Commandes d'administration et modération.")
                 .setColor(0x3498db)
                 .addFields(
-                    { name: "⚙️ Configuration", value: "`/setchannel` `/settranscript` `/setstaff` `/setwelcome` `/setlogs` `/setstatus` `/setlevelup` `/setxp` `/setup`", inline: false },
+                    { name: "⚙️ Configuration", value: "`/setchannel` `/settranscript` `/setstaff` `/setwelcome` `/setlogs` `/setstatus` `/setlevelup` `/setxp` `/setautorole` `/setup`", inline: false },
                     { name: "🏆 Niveaux", value: "`/addlevelrole` `/removelevelrole` `/resetrank`", inline: false },
                     { name: "🔨 Modération", value: "`/ban` `/kick` `/warn` `/clear` `/transfert` `/warnings`", inline: false },
                     { name: "📊 Statut", value: "`/status` `/refresh-status` `/botstatus`", inline: false },
                     { name: "ℹ️ Infos", value: "`/help` `/site` `/help-admin`", inline: false },
-                    { name: "📊 État", value: 
-                        `Tickets: ${status(ticketCategory)} | Transcripts: ${status(transcriptChannel)} | Staff: ${status(staffRole)}\nWelcome: ${status(welcomeChannel)} | Logs: ${status(logsChannel)} | Status: ${status(statusChannel)}\nLevelUp: ${status(levelupChannel)}`, 
-                        inline: false }
+                    { 
+                        name: "📊 État", 
+                        value: 
+                            `Tickets: ${status(ticketCategory)} | Transcripts: ${status(transcriptChannel)} | Staff: ${status(staffRole)}\n` +
+                            `Welcome: ${status(welcomeChannel)} | Logs: ${status(logsChannel)} | Status: ${status(statusChannel)}\n` +
+                            `LevelUp: ${status(levelupChannel)} | Auto-Rôle: ${status(autoRole)}`, 
+                        inline: false 
+                    },
+                    { 
+                        name: "🎭 Auto-Rôle actuel", 
+                        value: autoRoleInfo, 
+                        inline: false 
+                    }
                 )
                 .setTimestamp();
 
@@ -1616,6 +1669,7 @@ client.on('interactionCreate', async (interaction) => {
 // --- GESTION DES BOUTONS ---
 client.on('interactionCreate', async (interaction) => {
     if (interaction.isButton()) {
+        // ===== TICKET SUPPORT CLASSIQUE =====
         if (interaction.customId === 'create_ticket') {
             await interaction.deferReply({ ephemeral: true });
 
@@ -1677,6 +1731,80 @@ client.on('interactionCreate', async (interaction) => {
             }
         }
 
+        // ✅ NOUVEAU : TICKET BUG & REPORT
+        if (interaction.customId === 'create_bug_ticket') {
+            await interaction.deferReply({ ephemeral: true });
+
+            try {
+                const ticketCategory = Database.get('ticketCategory');
+                if (!ticketCategory) {
+                    return interaction.editReply("❌ Catégorie non configurée (`/setchannel`).");
+                }
+
+                const channelName = `bug-${interaction.user.username}`;
+                const existingChannel = interaction.guild.channels.cache.find(
+                    c => c.name === channelName.toLowerCase() && c.name.startsWith('bug-')
+                );
+                if (existingChannel) {
+                    return interaction.editReply(`❌ Vous avez déjà un signalement en cours : ${existingChannel}`);
+                }
+
+                const staffRole = Database.get('staffRole');
+                const permissionOverwrites = [
+                    { id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+                    { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles] }
+                ];
+
+                if (staffRole) {
+                    permissionOverwrites.push({
+                        id: staffRole,
+                        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles]
+                    });
+                }
+
+                const ticketChannel = await interaction.guild.channels.create({
+                    name: channelName,
+                    type: ChannelType.GuildText,
+                    parent: ticketCategory,
+                    permissionOverwrites: permissionOverwrites
+                });
+
+                const embed = new EmbedBuilder()
+                    .setTitle(`🐛 Signalement de Bug - ${interaction.user.tag}`)
+                    .setDescription(
+                        "Merci d'avoir signalé un problème ! 🙏\n\n" +
+                        "**Pour nous aider à résoudre le bug, veuillez nous fournir :**\n" +
+                        "• 📝 Une description détaillée du bug\n" +
+                        "• 🔄 Les étapes pour le reproduire\n" +
+                        "• 📸 Des captures d'écran si possible\n" +
+                        "• 💻 Votre environnement (OS, navigateur, version du site, etc.)\n" +
+                        "• 🕐 L'heure approximative où le bug s'est produit"
+                    )
+                    .setColor(0xe74c3c)
+                    .setTimestamp();
+
+                const row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('close_ticket')
+                        .setLabel('Fermer le ticket')
+                        .setEmoji('🔒')
+                        .setStyle(ButtonStyle.Danger)
+                );
+
+                await ticketChannel.send({
+                    content: `${interaction.user} ${staffRole ? `<@&${staffRole}>` : ''} 🐛 **Nouveau signalement de bug !**`,
+                    embeds: [embed],
+                    components: [row]
+                });
+
+                return interaction.editReply(`✅ Signalement créé : ${ticketChannel}`);
+            } catch (error) {
+                console.error('Erreur création bug report:', error);
+                return interaction.editReply('❌ Erreur lors de la création.').catch(() => {});
+            }
+        }
+
+        // ===== FERMETURE DE TICKET (support + bug) =====
         if (interaction.customId === 'close_ticket') {
             await interaction.deferReply({ ephemeral: true });
 
@@ -1780,8 +1908,33 @@ function startStatusInterval() {
     }, 5 * 60 * 1000);
 }
 
-// --- JOIN / QUIT ---
-client.on('guildMemberAdd', (member) => {
+// ✅ MODIFIÉ : JOIN avec auto-rôle
+client.on('guildMemberAdd', async (member) => {
+    // --- SYSTÈME AUTO-RÔLE ---
+    const autoRoleId = Database.get('autoRole');
+    if (autoRoleId) {
+        try {
+            const role = member.guild.roles.cache.get(autoRoleId);
+            if (role) {
+                await member.roles.add(role).catch(err => {
+                    console.error(`[AUTO-ROLE] Erreur attribution rôle à ${member.user.tag}:`, err.message);
+                });
+                console.log(`[AUTO-ROLE] ✅ Rôle "${role.name}" attribué à ${member.user.tag}`);
+                
+                // Log optionnel dans le salon des logs
+                const logEmbed = new EmbedBuilder()
+                    .setTitle("🎭 Auto-Rôle Attribué")
+                    .setDescription(`Le rôle ${role} a été attribué automatiquement à ${member}.`)
+                    .setColor(0x2ecc71)
+                    .setTimestamp();
+                sendLog(member.guild, logEmbed);
+            }
+        } catch (e) {
+            console.error('[AUTO-ROLE] Erreur générale:', e);
+        }
+    }
+
+    // --- MESSAGE DE BIENVENUE ---
     const welcomeChannel = Database.get('welcomeChannel');
     if (!welcomeChannel) return;
     const channel = member.guild.channels.cache.get(welcomeChannel);
