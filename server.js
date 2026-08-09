@@ -2233,3 +2233,4 @@ client.on('messageReactionAdd', async (reaction, user) => {
 
 // --- LANCEMENT ---
 client.login(config.token);
+
