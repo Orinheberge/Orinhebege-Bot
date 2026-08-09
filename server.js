@@ -39,6 +39,71 @@ try {
     console.error('Erreur de chargement du règlement:', e);
 }
 
+// --- FONCTION DE CRÉATION DE L'EMBED RÈGLEMENT ---
+function createReglementEmbed() {
+    if (!reglementData) return null;
+
+    const embed = new EmbedBuilder()
+        .setTitle(reglementData.title || "📜 Règlement")
+        .setDescription(reglementData.description || "");
+
+    // Couleur (accepte décimal ou hex)
+    if (reglementData.color) {
+        embed.setColor(reglementData.color);
+    }
+
+    // Thumbnail (image en haut à droite)
+    if (reglementData.thumbnail) {
+        embed.setThumbnail(reglementData.thumbnail);
+    }
+
+    // Image principale (optionnel)
+    if (reglementData.image) {
+        embed.setImage(reglementData.image);
+    }
+
+    // Ajouter tous les champs du JSON
+    if (Array.isArray(reglementData.fields)) {
+        for (const field of reglementData.fields) {
+            embed.addFields({
+                name: field.name || "Champ sans titre",
+                value: field.value || "—",
+                inline: field.inline === true
+            });
+        }
+    }
+
+    // Footer
+    if (reglementData.footer && reglementData.footer.text) {
+        const footerObj = { text: reglementData.footer.text };
+        if (reglementData.footer.icon_url) {
+            footerObj.iconURL = reglementData.footer.icon_url;
+        }
+        embed.setFooter(footerObj);
+    }
+
+    // Timestamp
+    if (reglementData.timestamp === true || reglementData.timestamp === "true") {
+        embed.setTimestamp();
+    }
+
+    // Auteur (optionnel)
+    if (reglementData.author) {
+        embed.setAuthor({
+            name: reglementData.author.name || "",
+            iconURL: reglementData.author.icon_url || null,
+            url: reglementData.author.url || null
+        });
+    }
+
+    // URL du titre (optionnel)
+    if (reglementData.url) {
+        embed.setURL(reglementData.url);
+    }
+
+    return embed;
+}
+
 // --- SYSTÈME DE BASE DE DONNÉES JSON ---
 const Database = {
     load() {
