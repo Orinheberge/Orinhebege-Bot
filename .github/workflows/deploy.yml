@@ -41,7 +41,7 @@ jobs:
             --exclude='*.log' \
             --exclude='database.json' \
             --exclude='warns.json' \
-            --exclude='reglement.json' \
+      
             --exclude='levels.json' \
             --exclude='config.json' \
             -e "ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10" \
