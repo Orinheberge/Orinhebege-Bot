@@ -29,11 +29,138 @@ const missingVars = requiredEnvVars.filter(key => !process.env[key]);
 if (missingVars.length > 0) {
     console.error('❌ Variables d\'environnement manquantes :');
     missingVars.forEach(v => console.error(`   → ${v}`));
-    console.error('\n   Copiez .env.example vers .env et remplissez les valeurs.\n');
     process.exit(1);
 }
 
-console.log('✅ Variables d\'environnement chargées');
+// =============================================
+// SYSTÈME DE LOG VERS CONSOLE DISCORD
+// =============================================
+const CONSOLE_CHANNEL_ID = process.env.CONSOLE_CHANNEL_ID || null;
+const CONSOLE_OWNERS = (process.env.CONSOLE_OWNERS || '').split(',').map(id => id.trim()).filter(Boolean);
+
+// Buffer pour stocker les logs avant que le bot soit connecté
+const logBuffer = [];
+let botReady = false;
+let consoleChannel = null;
+
+function getTimestamp() {
+    return new Date().toLocaleString('fr-FR', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false, timeZone: 'Europe/Paris'
+    });
+}
+
+/**
+ * Envoie un log dans la console Discord ET dans la console terminal
+ */
+async function sendLog(message, type = 'INFO') {
+    const timestamp = getTimestamp();
+    const emojis = { INFO: 'ℹ️', SUCCESS: '✅', WARN: '⚠️', ERROR: '❌', STARTUP: '🚀', CONSOLE: '🖥️' };
+    const emoji = emojis[type] || 'ℹ️';
+    const formatted = `[${timestamp}] ${emoji} [${type}] ${message}`;
+
+    // Toujours afficher dans le terminal
+    if (type === 'ERROR') console.error(formatted);
+    else if (type === 'WARN') console.warn(formatted);
+    else console.log(formatted);
+
+    // Envoyer dans Discord si prêt
+    if (botReady && consoleChannel) {
+        try {
+            // Discord limite : 2000 caractères par message
+            const truncated = formatted.length > 1900 ? formatted.substring(0, 1900) + '...' : formatted;
+            await consoleChannel.send(`\`${truncated}\``);
+        } catch (e) {
+            // Silencieux pour éviter les boucles infinies
+        }
+    } else {
+        // Stocker dans le buffer
+        logBuffer.push({ message: formatted, type, timestamp: Date.now() });
+        // Garder seulement les 50 derniers
+        if (logBuffer.length > 50) logBuffer.shift();
+    }
+}
+
+/**
+ * Envoie un embed stylisé dans la console Discord
+ */
+async function sendEmbedLog(title, description, color = 0x2f3136, fields = []) {
+    if (!botReady || !consoleChannel) return;
+    try {
+        const embed = new EmbedBuilder()
+            .setTitle(title)
+            .setDescription(description.substring(0, 4000))
+            .setColor(color)
+            .setTimestamp();
+        if (fields.length > 0) embed.addFields(fields);
+        await consoleChannel.send({ embeds: [embed] });
+    } catch (e) {}
+}
+
+/**
+ * Vide le buffer de logs dans Discord
+ */
+async function flushLogBuffer() {
+    if (!consoleChannel || logBuffer.length === 0) return;
+
+    const embed = new EmbedBuilder()
+        .setTitle('📋 Logs de démarrage')
+        .setColor(0x5865F2)
+        .setTimestamp();
+
+    const lines = logBuffer.map(l => l.message);
+    const content = lines.join('\n');
+
+    if (content.length > 4000) {
+        // Découper en plusieurs messages
+        for (let i = 0; i < lines.length; i += 20) {
+            const chunk = lines.slice(i, i + 20).join('\n');
+            try {
+                await consoleChannel.send(`\`\`\`\n${chunk.substring(0, 1900)}\n\`\`\``);
+            } catch (e) {}
+        }
+    } else {
+        embed.setDescription(`\`\`\`\n${content}\n\`\`\``);
+        try { await consoleChannel.send({ embeds: [embed] }); } catch (e) {}
+    }
+
+    logBuffer.length = 0;
+}
+
+// =============================================
+// REDIRECTION DES console.log / console.error
+// =============================================
+const originalConsoleLog = console.log;
+const originalConsoleError = console.error;
+const originalConsoleWarn = console.warn;
+
+console.log = (...args) => {
+    originalConsoleLog.apply(console, args);
+    const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+    // Ne pas re-log les messages qui viennent déjà de sendLog (éviter boucle)
+    if (!msg.includes('[INFO]') && !msg.includes('[SUCCESS]') && !msg.includes('[STARTUP]')) {
+        sendLog(msg, 'INFO').catch(() => {});
+    }
+};
+
+console.error = (...args) => {
+    originalConsoleError.apply(console, args);
+    const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ');
+    if (!msg.includes('[ERROR]')) {
+        sendLog(msg, 'ERROR').catch(() => {});
+    }
+};
+
+console.warn = (...args) => {
+    originalConsoleWarn.apply(console, args);
+    const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+    if (!msg.includes('[WARN]')) {
+        sendLog(msg, 'WARN').catch(() => {});
+    }
+};
+
+sendLog('Variables d\'environnement chargées', 'SUCCESS');
 
 // =============================================
 // 1. CLIENT DISCORD
@@ -59,26 +186,28 @@ const client = new Client({
 client.commands = new Collection();
 client.config = config;
 
+// Exposer les fonctions de log sur le client
+client.sendLog = sendLog;
+client.sendEmbedLog = sendEmbedLog;
+
 // =============================================
 // 2. ERREURS GLOBALES
 // =============================================
 client.on('error', (error) => {
-    console.error(`[DISCORD ERROR] ${error.message}`);
+    sendLog(`[DISCORD] ${error.message}`, 'ERROR');
 });
 
 process.on('unhandledRejection', (error) => {
-    console.error('[UNHANDLED REJECTION]', error);
+    sendLog(`[UNHANDLED REJECTION] ${error?.stack || error}`, 'ERROR');
 });
 
 process.on('uncaughtException', (error) => {
-    console.error('[UNCAUGHT EXCEPTION]', error);
+    sendLog(`[UNCAUGHT EXCEPTION] ${error?.stack || error}`, 'ERROR');
 });
 
 // =============================================
 // 3. CONSOLE DISCORD (salon dédié)
 // =============================================
-const CONSOLE_CHANNEL_ID = process.env.CONSOLE_CHANNEL_ID || null;
-const CONSOLE_OWNERS = (process.env.CONSOLE_OWNERS || '').split(',').map(id => id.trim()).filter(Boolean);
 const consoleSessions = new Map();
 
 const CONSOLE_COMMANDS = {
@@ -95,6 +224,7 @@ const CONSOLE_COMMANDS = {
             '║  memory      → Usage mémoire         ║',
             '║  guilds      → Liste serveurs        ║',
             '║  commands    → Slash commands        ║',
+            '║  logs [n]    → Derniers logs         ║',
             '║  eval <code> → Exécuter JS ⚠️       ║',
             '║  say <id> <msg> → Message salon     ║',
             '║  broadcast <msg> → Tous serveurs    ║',
@@ -161,6 +291,15 @@ const CONSOLE_COMMANDS = {
         desc: 'Slash commands',
         execute: () => client.commands.map(c => `• \`/${c.data.name}\` — ${c.data.description || '-'}`).join('\n') || 'Aucune commande'
     },
+    logs: {
+        desc: 'Derniers logs',
+        execute: (args) => {
+            const n = parseInt(args[0]) || 10;
+            const recent = logBuffer.slice(-Math.min(n, 50));
+            if (!recent.length) return '📭 Aucun log en buffer';
+            return recent.map(l => l.message).join('\n');
+        }
+    },
     eval: {
         desc: 'Exécuter JS ⚠️',
         execute: async (args) => {
@@ -202,7 +341,11 @@ const CONSOLE_COMMANDS = {
     },
     restart: {
         desc: 'Redémarrer',
-        execute: () => { setTimeout(() => process.exit(0), 2000); return '🔄 Redémarrage dans 2s...'; }
+        execute: () => {
+            sendLog('Redémarrage demandé via console Discord', 'WARN');
+            setTimeout(() => process.exit(0), 2000);
+            return '🔄 Redémarrage dans 2s...';
+        }
     },
     clear: { desc: 'Effacer', execute: () => '__CLEAR__' },
     close: { desc: 'Fermer', execute: () => '__CLOSE__' }
@@ -262,10 +405,7 @@ client.buildConsoleButtons = buildConsoleButtons;
 client.isConsoleOwner = isConsoleOwner;
 client.CONSOLE_CHANNEL_ID = CONSOLE_CHANNEL_ID;
 
-// ✅ LOG DIAGNOSTIC CONSOLE
-console.log(`🖥️  Console Discord:`);
-console.log(`   → Salon: ${CONSOLE_CHANNEL_ID || '❌ NON CONFIGURÉ (CONSOLE_CHANNEL_ID manquant dans .env)'}`);
-console.log(`   → Owners: ${CONSOLE_OWNERS.length > 0 ? CONSOLE_OWNERS.join(', ') : '⚠️  Aucun (tout le monde autorisé)'}`);
+sendLog(`Console Discord: Salon=${CONSOLE_CHANNEL_ID || 'NON CONFIGURÉ'} | Owners=${CONSOLE_OWNERS.length > 0 ? CONSOLE_OWNERS.join(',') : 'Tous'}`, 'INFO');
 
 // =============================================
 // 4. CHARGEUR DYNAMIQUE D'ÉVÉNEMENTS
@@ -287,7 +427,7 @@ function loadEvents(dir) {
 
                 for (const event of events) {
                     if (!event.name || typeof event.execute !== 'function') {
-                        console.warn(`⚠️  Event invalide ignoré: ${fullPath}`);
+                        sendLog(`Event invalide ignoré: ${fullPath}`, 'WARN');
                         continue;
                     }
                     if (event.once) {
@@ -298,7 +438,7 @@ function loadEvents(dir) {
                     count++;
                 }
             } catch (error) {
-                console.error(`❌ Erreur chargement event ${fullPath}:`, error.message);
+                sendLog(`Erreur chargement event ${path.basename(fullPath)}: ${error.message}`, 'ERROR');
             }
         }
     }
@@ -323,18 +463,18 @@ function loadCommands(dir) {
                 const command = require(fullPath);
 
                 if (!command.data || !command.execute) {
-                    console.warn(`⚠️  Commande invalide ignorée: ${fullPath}`);
+                    sendLog(`Commande invalide ignorée: ${path.basename(fullPath)}`, 'WARN');
                     continue;
                 }
                 if (client.commands.has(command.data.name)) {
-                    console.error(`🔴 DOUBLON DÉTECTÉ: "${command.data.name}" dans ${fullPath}`);
+                    sendLog(`DOUBLON DÉTECTÉ: "${command.data.name}" dans ${path.basename(fullPath)}`, 'ERROR');
                     continue;
                 }
 
                 client.commands.set(command.data.name, command);
                 count++;
             } catch (error) {
-                console.error(`❌ Erreur chargement commande ${fullPath}:`, error.message);
+                sendLog(`Erreur chargement commande ${path.basename(fullPath)}: ${error.message}`, 'ERROR');
             }
         }
     }
@@ -342,42 +482,89 @@ function loadCommands(dir) {
 }
 
 // =============================================
-// 6. DÉMARRAGE
+// 6. ÉVÉNEMENT READY (intégré directement)
+// =============================================
+client.once('clientReady', async () => {
+    sendLog(`Bot connecté en tant que ${client.user.tag}`, 'SUCCESS');
+
+    // Récupérer le salon console
+    if (CONSOLE_CHANNEL_ID) {
+        consoleChannel = client.channels.cache.get(CONSOLE_CHANNEL_ID);
+        if (consoleChannel) {
+            botReady = true;
+            sendLog(`Salon console trouvé: #${consoleChannel.name}`, 'SUCCESS');
+
+            // Envoyer un embed de démarrage
+            const uptime = process.uptime();
+            const embed = new EmbedBuilder()
+                .setTitle('🚀 Bot Démarré')
+                .setColor(0x57F287)
+                .addFields(
+                    { name: '🤖 Bot', value: client.user.tag, inline: true },
+                    { name: '🏓 Latence', value: `${client.ws.ping}ms`, inline: true },
+                    { name: '⏱️ Démarrage', value: `${uptime.toFixed(1)}s`, inline: true },
+                    { name: '🌐 Serveurs', value: `${client.guilds.cache.size}`, inline: true },
+                    { name: '👥 Utilisateurs', value: `${client.users.cache.size}`, inline: true },
+                    { name: '📝 Commandes', value: `${client.commands.size}`, inline: true },
+                    { name: '💻 Node.js', value: process.version, inline: true },
+                    { name: '📦 discord.js', value: `v${require('discord.js').version}`, inline: true }
+                )
+                .setTimestamp()
+                .setFooter({ text: 'Orinstone Bot v2.1' });
+
+            try { await consoleChannel.send({ embeds: [embed] }); } catch (e) {}
+
+            // Vider le buffer de logs
+            await flushLogBuffer();
+
+        } else {
+            sendLog(`Salon console ID ${CONSOLE_CHANNEL_ID} introuvable !`, 'ERROR');
+        }
+    } else {
+        sendLog('CONSOLE_CHANNEL_ID non configuré - logs Discord désactivés', 'WARN');
+        botReady = true; // Activer quand même pour le panel web
+    }
+});
+
+// =============================================
+// 7. DÉMARRAGE
 // =============================================
 async function start() {
-    console.log('\n🚀 Démarrage d\'Orinstone Bot v2.1...\n');
+    sendLog('Démarrage d\'Orinstone Bot v2.1...', 'STARTUP');
 
     // Charger les événements
     const eventsPath = path.join(__dirname, 'events');
     if (fs.existsSync(eventsPath)) {
         const eventCount = loadEvents(eventsPath);
-        console.log(`✅ ${eventCount} événement(s) chargé(s)`);
+        sendLog(`${eventCount} événement(s) chargé(s)`, 'SUCCESS');
     } else {
-        console.warn('⚠️  Dossier events/ introuvable');
+        sendLog('Dossier events/ introuvable', 'WARN');
     }
 
     // Charger les commandes
     const commandsPath = path.join(__dirname, 'commands');
     if (fs.existsSync(commandsPath)) {
         const cmdCount = loadCommands(commandsPath);
-        console.log(`✅ ${cmdCount} commande(s) chargée(s)`);
+        sendLog(`${cmdCount} commande(s) chargée(s)`, 'SUCCESS');
     } else {
-        console.warn('⚠️  Dossier commands/ introuvable');
+        sendLog('Dossier commands/ introuvable', 'WARN');
     }
 
     // Démarrer le panel web
     try {
         const { startWebServer } = require('./managers/WebPanel');
         startWebServer(client);
+        sendLog(`Panel web démarré sur le port ${config.webPort}`, 'SUCCESS');
     } catch (error) {
-        console.error('❌ Erreur démarrage panel web:', error.message);
+        sendLog(`Erreur démarrage panel web: ${error.message}`, 'ERROR');
     }
 
     // Connexion à Discord
     try {
+        sendLog('Connexion à Discord en cours...', 'STARTUP');
         await client.login(config.token);
     } catch (error) {
-        console.error('❌ Échec de connexion Discord:', error.message);
+        sendLog(`Échec de connexion Discord: ${error.message}`, 'ERROR');
         process.exit(1);
     }
 }
