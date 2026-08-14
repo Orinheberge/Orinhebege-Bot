@@ -46,7 +46,6 @@ jobs:
             --exclude='warns.json' \
             --exclude='levels.json' \
             --exclude='reglement.json' \
-            --exclude='config.json' \
             -e "ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10" \
             ./ \
             root@5.48.143.126:/var/lib/pterodactyl/volumes/8e4cb01d-97ad-42f7-a9c8-9e21c859d26b/

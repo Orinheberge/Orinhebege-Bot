@@ -10,10 +10,11 @@
     <link rel="stylesheet" href="/assets/css/style.css">
 </head>
 <body class="text-white">
+
     <!-- Notification Toast -->
     <div id="notification" class="hidden fixed top-20 right-6 z-50 px-6 py-3 rounded-lg shadow-lg text-white"></div>
 
-    <!-- Navbar -->
+    <!-- ✅ Navbar complète et cohérente -->
     <nav class="glass sticky top-0 z-40 px-6 py-4 flex justify-between items-center">
         <div class="flex items-center gap-3">
             <i class="fa-solid fa-cube text-purple-400 text-2xl"></i>
@@ -21,10 +22,11 @@
         </div>
         <div class="flex gap-4 items-center text-sm">
             <a href="/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-house mr-1"></i> Accueil</a>
-            <a href="/features" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-sliders mr-1"></i> Features</a>
-            <a href="/status" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-signal mr-1"></i> Statuts</a>
-            <a href="/config" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-gear mr-1"></i> Config</a>
-             <a href="/automod" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-shield-halved mr-1"></i> AutoMod</a>
+            <a href="/features/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-sliders mr-1"></i> Features</a>
+            <a href="/automod/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-shield-halved mr-1"></i> AutoMod</a>
+            <a href="/status/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-signal mr-1"></i> Statuts</a>
+            <a href="/config/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-gear mr-1"></i> Config</a>
+            <a href="/about/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-circle-info mr-1"></i> À propos</a>
             <button onclick="logout()" class="bg-red-500/80 hover:bg-red-600 px-4 py-2 rounded-lg transition text-xs font-medium">
                 <i class="fa-solid fa-right-from-bracket"></i>
             </button>
@@ -33,25 +35,48 @@
 
     <!-- Contenu -->
     <div class="container mx-auto px-6 py-8">
+
+        <!-- Header -->
         <div class="mb-8 fade-in">
             <h1 class="text-4xl font-bold mb-2"><i class="fa-solid fa-gauge-high text-purple-400 mr-2"></i>Dashboard</h1>
             <p class="text-gray-400">Vue d'ensemble de votre bot Discord Orinstone</p>
         </div>
 
-        <!-- Stats Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <!-- ==================== STATS CARDS ==================== -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+
+            <!-- Fonctionnalités actives -->
             <div class="glass rounded-xl p-6 card-hover fade-in fade-in-delay-1">
                 <div class="flex items-center gap-4">
-                    <div class="bg-green-500/20 p-4 rounded-xl"><i class="fa-solid fa-circle-check text-green-400 text-2xl"></i></div>
+                    <div class="bg-green-500/20 p-4 rounded-xl shrink-0">
+                        <i class="fa-solid fa-circle-check text-green-400 text-2xl"></i>
+                    </div>
                     <div>
                         <p class="text-gray-400 text-sm">Fonctionnalités actives</p>
                         <p class="text-3xl font-bold" id="featuresCount">-- / --</p>
                     </div>
                 </div>
             </div>
+
+            <!-- AutoMod -->
+            <div class="glass rounded-xl p-6 card-hover fade-in fade-in-delay-1">
+                <div class="flex items-center gap-4">
+                    <div class="bg-red-500/20 p-4 rounded-xl shrink-0">
+                        <i class="fa-solid fa-shield-halved text-red-400 text-2xl"></i>
+                    </div>
+                    <div>
+                        <p class="text-gray-400 text-sm">AutoMod</p>
+                        <p class="text-3xl font-bold" id="automodStatus">--</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Statut du bot -->
             <div class="glass rounded-xl p-6 card-hover fade-in fade-in-delay-2">
                 <div class="flex items-center gap-4">
-                    <div class="bg-blue-500/20 p-4 rounded-xl"><i class="fa-solid fa-server text-blue-400 text-2xl"></i></div>
+                    <div class="bg-blue-500/20 p-4 rounded-xl shrink-0">
+                        <i class="fa-solid fa-server text-blue-400 text-2xl"></i>
+                    </div>
                     <div>
                         <p class="text-gray-400 text-sm">Statut du bot</p>
                         <p class="text-3xl font-bold text-green-400 flex items-center gap-2">
@@ -60,61 +85,147 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Latence -->
             <div class="glass rounded-xl p-6 card-hover fade-in fade-in-delay-3">
                 <div class="flex items-center gap-4">
-                    <div class="bg-purple-500/20 p-4 rounded-xl"><i class="fa-solid fa-clock text-purple-400 text-2xl"></i></div>
+                    <div class="bg-purple-500/20 p-4 rounded-xl shrink-0">
+                        <i class="fa-solid fa-bolt text-purple-400 text-2xl"></i>
+                    </div>
                     <div>
-                        <p class="text-gray-400 text-sm">Port du panel</p>
-                        <p class="text-3xl font-bold">26162</p>
+                        <p class="text-gray-400 text-sm">Latence API</p>
+                        <p class="text-3xl font-bold" id="pingValue">-- ms</p>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Quick Access -->
-        <div class="glass rounded-xl p-8 fade-in fade-in-delay-3">
+        <!-- ==================== ACCÈS RAPIDES ==================== -->
+        <div class="glass rounded-xl p-8 fade-in fade-in-delay-3 mb-8">
             <h2 class="text-2xl font-bold mb-6"><i class="fa-solid fa-bolt text-yellow-400 mr-2"></i>Accès rapides</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <a href="/features" data-auth-link class="bg-gradient-to-r from-purple-600/80 to-indigo-600/80 hover:from-purple-600 hover:to-indigo-600 p-6 rounded-xl transition card-hover block">
-                    <i class="fa-solid fa-sliders text-3xl mb-3"></i>
-                    <h3 class="text-xl font-bold">Gérer les fonctionnalités</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
+                <a href="/features/" data-auth-link class="bg-gradient-to-r from-purple-600/80 to-indigo-600/80 hover:from-purple-600 hover:to-indigo-600 p-6 rounded-xl transition card-hover block group">
+                    <i class="fa-solid fa-sliders text-3xl mb-3 group-hover:scale-110 transition-transform inline-block"></i>
+                    <h3 class="text-xl font-bold">Fonctionnalités</h3>
                     <p class="text-purple-200 text-sm mt-1">Activez/désactivez les modules du bot</p>
                 </a>
-                <a href="/status" data-auth-link class="bg-gradient-to-r from-green-600/80 to-emerald-600/80 hover:from-green-600 hover:to-emerald-600 p-6 rounded-xl transition card-hover block">
-                    <i class="fa-solid fa-signal text-3xl mb-3"></i>
-                    <h3 class="text-xl font-bold">Statuts des services</h3>
+
+                <a href="/automod/" data-auth-link class="bg-gradient-to-r from-red-600/80 to-orange-600/80 hover:from-red-600 hover:to-orange-600 p-6 rounded-xl transition card-hover block group">
+                    <i class="fa-solid fa-shield-halved text-3xl mb-3 group-hover:scale-110 transition-transform inline-block"></i>
+                    <h3 class="text-xl font-bold">AutoMod</h3>
+                    <p class="text-red-200 text-sm mt-1">Configurez la modération automatique</p>
+                </a>
+
+                <a href="/status/" data-auth-link class="bg-gradient-to-r from-green-600/80 to-emerald-600/80 hover:from-green-600 hover:to-emerald-600 p-6 rounded-xl transition card-hover block group">
+                    <i class="fa-solid fa-signal text-3xl mb-3 group-hover:scale-110 transition-transform inline-block"></i>
+                    <h3 class="text-xl font-bold">Statuts services</h3>
                     <p class="text-green-200 text-sm mt-1">Surveillez vos hébergements en temps réel</p>
                 </a>
-                <a href="/config" data-auth-link class="bg-gradient-to-r from-blue-600/80 to-cyan-600/80 hover:from-blue-600 hover:to-cyan-600 p-6 rounded-xl transition card-hover block">
-                    <i class="fa-solid fa-gear text-3xl mb-3"></i>
+
+                <a href="/config/" data-auth-link class="bg-gradient-to-r from-blue-600/80 to-cyan-600/80 hover:from-blue-600 hover:to-cyan-600 p-6 rounded-xl transition card-hover block group">
+                    <i class="fa-solid fa-gear text-3xl mb-3 group-hover:scale-110 transition-transform inline-block"></i>
                     <h3 class="text-xl font-bold">Configuration</h3>
-                    <p class="text-blue-200 text-sm mt-1">Paramètres XP, niveaux et rôles</p>
+                    <p class="text-blue-200 text-sm mt-1">Paramètres XP, niveaux, salons et rôles</p>
                 </a>
-                <a href="/about" data-auth-link class="bg-gradient-to-r from-pink-600/80 to-rose-600/80 hover:from-pink-600 hover:to-rose-600 p-6 rounded-xl transition card-hover block">
-                    <i class="fa-solid fa-circle-info text-3xl mb-3"></i>
+
+                <a href="/about/" data-auth-link class="bg-gradient-to-r from-pink-600/80 to-rose-600/80 hover:from-pink-600 hover:to-rose-600 p-6 rounded-xl transition card-hover block group">
+                    <i class="fa-solid fa-circle-info text-3xl mb-3 group-hover:scale-110 transition-transform inline-block"></i>
                     <h3 class="text-xl font-bold">À propos</h3>
-                    <p class="text-pink-200 text-sm mt-1">Informations système et version</p>
+                    <p class="text-pink-200 text-sm mt-1">Informations système et version du panel</p>
                 </a>
+
+                <!-- Carte lien externe site -->
+                <a href="https://heberge.orinstone.deepstone.fr" target="_blank" class="bg-gradient-to-r from-slate-700/80 to-slate-600/80 hover:from-slate-600 hover:to-slate-500 p-6 rounded-xl transition card-hover block group">
+                    <i class="fa-solid fa-globe text-3xl mb-3 group-hover:scale-110 transition-transform inline-block"></i>
+                    <h3 class="text-xl font-bold">Site Web</h3>
+                    <p class="text-slate-300 text-sm mt-1">Accéder à l'hébergement Orinstone</p>
+                </a>
+
             </div>
         </div>
+
+        <!-- ==================== RÉSUMÉ SERVICES ==================== -->
+        <div class="glass rounded-xl p-8 fade-in">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-2xl font-bold"><i class="fa-solid fa-signal text-green-400 mr-2"></i>Services hébergés</h2>
+                <a href="/status/" class="text-sm text-purple-400 hover:text-purple-300 transition flex items-center gap-1">
+                    Voir tout <i class="fa-solid fa-arrow-right text-xs"></i>
+                </a>
+            </div>
+            <div id="servicesList" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div class="col-span-full text-center py-6 text-gray-500 text-sm">
+                    <i class="fa-solid fa-spinner fa-spin mr-2"></i>Chargement des statuts...
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <footer class="glass mt-12 py-6 text-center text-gray-500 text-sm">
-        <p>&copy; 2026 Orinstone Network - Panel de gestion du bot Discord</p>
+        <p>&copy; 2026 Orinstone Network — Panel de gestion du bot Discord</p>
     </footer>
 
     <script src="/assets/js/script.js"></script>
     <script>
-        // Charger les stats au démarrage
         (async () => {
             try {
                 const data = await Panel.api('/api/status');
-                if (data.success && data.features) {
+
+                // === Compteur fonctionnalités ===
+                if (data.features) {
+                    const total   = Object.keys(data.features).length;
                     const enabled = Object.values(data.features).filter(v => v).length;
-                    const total = Object.keys(data.features).length;
-                    document.getElementById('featuresCount').textContent = `${enabled} / ${total}`;
+                    const el = document.getElementById('featuresCount');
+                    el.textContent = `${enabled} / ${total}`;
+                    el.className = `text-3xl font-bold ${enabled === total ? 'text-green-400' : enabled > 0 ? 'text-yellow-400' : 'text-red-400'}`;
                 }
-            } catch (e) { console.error('Erreur chargement dashboard:', e); }
+
+                // === Statut AutoMod ===
+                if (data.features) {
+                    // On récupère la config complète pour automod
+                    const cfgData = await Panel.api('/api/config');
+                    const automod = cfgData.config?.automod || {};
+                    const el = document.getElementById('automodStatus');
+                    if (automod.enabled) {
+                        el.innerHTML = '<span class="text-green-400 flex items-center gap-2"><span class="status-dot online status-pulse"></span>Actif</span>';
+                    } else {
+                        el.innerHTML = '<span class="text-red-400">Inactif</span>';
+                    }
+                }
+
+                // === Services hébergés ===
+                if (data.services && data.services.length > 0) {
+                    const container = document.getElementById('servicesList');
+                    container.innerHTML = data.services.map(s => {
+                        const online = s.online;
+                        const color  = online ? 'green' : 'red';
+                        const dot    = online ? 'online status-pulse' : 'offline';
+                        return `
+                            <div class="bg-slate-800/60 rounded-lg px-4 py-3 flex items-center justify-between">
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <span class="status-dot ${dot} shrink-0"></span>
+                                    <span class="text-sm font-medium truncate">${s.name}</span>
+                                </div>
+                                <div class="flex items-center gap-2 shrink-0 ml-2">
+                                    ${s.responseTime ? `<span class="text-xs text-gray-400 font-mono">${s.responseTime}ms</span>` : ''}
+                                    <span class="text-xs px-2 py-0.5 rounded-full font-medium ${online ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}">
+                                        ${online ? 'En ligne' : 'Hors ligne'}
+                                    </span>
+                                </div>
+                            </div>`;
+                    }).join('');
+                }
+
+            } catch (e) {
+                console.error('Erreur chargement dashboard:', e);
+                document.getElementById('featuresCount').textContent = 'Erreur';
+                document.getElementById('automodStatus').textContent = 'Erreur';
+                document.getElementById('servicesList').innerHTML = `
+                    <div class="col-span-full text-center py-6 text-red-400 text-sm">
+                        <i class="fa-solid fa-triangle-exclamation mr-2"></i>Impossible de charger les données.
+                    </div>`;
+            }
         })();
     </script>
 </body>
