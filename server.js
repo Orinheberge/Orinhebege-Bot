@@ -1,5 +1,5 @@
 // =============================================
-// 0. CHARGEMENT DES VARIABLES D'ENVIRONNEMENT
+// 0. VARIABLES D'ENVIRONNEMENT
 // =============================================
 require('dotenv').config();
 
@@ -10,6 +10,8 @@ const {
 } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
+const https = require('https');
+const http = require('http');
 
 // =============================================
 // CONFIGURATION
@@ -27,21 +29,24 @@ const requiredEnvVars = ['DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_GUILD_ID
 const missingVars = requiredEnvVars.filter(key => !process.env[key]);
 
 if (missingVars.length > 0) {
-    console.error('❌ Variables d\'environnement manquantes :');
-    missingVars.forEach(v => console.error(`   → ${v}`));
+    // Utiliser les console originaux car pas encore redirigés
+    const _log = console.log;
+    _log('❌ Variables d\'environnement manquantes :');
+    missingVars.forEach(v => _log(`   → ${v}`));
+    _log('\n   Configurez-les dans votre .env ou panel d\'hébergement.\n');
     process.exit(1);
 }
 
 // =============================================
-// SYSTÈME DE LOG VERS CONSOLE DISCORD
+// SYSTÈME DE LOG (Discord + Terminal)
 // =============================================
 const CONSOLE_CHANNEL_ID = process.env.CONSOLE_CHANNEL_ID || null;
 const CONSOLE_OWNERS = (process.env.CONSOLE_OWNERS || '').split(',').map(id => id.trim()).filter(Boolean);
 
-// Buffer pour stocker les logs avant que le bot soit connecté
 const logBuffer = [];
 let botReady = false;
 let consoleChannel = null;
+let isRedirecting = false; // Anti-boucle
 
 function getTimestamp() {
     return new Date().toLocaleString('fr-FR', {
@@ -51,113 +56,99 @@ function getTimestamp() {
     });
 }
 
-/**
- * Envoie un log dans la console Discord ET dans la console terminal
- */
+// Garder les fonctions console originales AVANT redirection
+const _consoleLog   = console.log.bind(console);
+const _consoleError = console.error.bind(console);
+const _consoleWarn  = console.warn.bind(console);
+
 async function sendLog(message, type = 'INFO') {
     const timestamp = getTimestamp();
-    const emojis = { INFO: 'ℹ️', SUCCESS: '✅', WARN: '⚠️', ERROR: '❌', STARTUP: '🚀', CONSOLE: '🖥️' };
+    const emojis = { INFO: 'ℹ️', SUCCESS: '✅', WARN: '⚠️', ERROR: '❌', STARTUP: '🚀', CONSOLE: '🖥️', PTERO: '🔌' };
     const emoji = emojis[type] || 'ℹ️';
     const formatted = `[${timestamp}] ${emoji} [${type}] ${message}`;
 
-    // Toujours afficher dans le terminal
-    if (type === 'ERROR') console.error(formatted);
-    else if (type === 'WARN') console.warn(formatted);
-    else console.log(formatted);
+    // Terminal (toujours)
+    if (type === 'ERROR') _consoleError(formatted);
+    else if (type === 'WARN') _consoleWarn(formatted);
+    else _consoleLog(formatted);
 
-    // Envoyer dans Discord si prêt
-    if (botReady && consoleChannel) {
+    // Discord (si prêt)
+    if (botReady && consoleChannel && !isRedirecting) {
         try {
-            // Discord limite : 2000 caractères par message
             const truncated = formatted.length > 1900 ? formatted.substring(0, 1900) + '...' : formatted;
             await consoleChannel.send(`\`${truncated}\``);
-        } catch (e) {
-            // Silencieux pour éviter les boucles infinies
-        }
-    } else {
-        // Stocker dans le buffer
-        logBuffer.push({ message: formatted, type, timestamp: Date.now() });
-        // Garder seulement les 50 derniers
+        } catch (e) { /* silencieux */ }
+    } else if (!botReady) {
+        logBuffer.push({ message: formatted, type, ts: Date.now() });
         if (logBuffer.length > 50) logBuffer.shift();
     }
 }
 
-/**
- * Envoie un embed stylisé dans la console Discord
- */
 async function sendEmbedLog(title, description, color = 0x2f3136, fields = []) {
     if (!botReady || !consoleChannel) return;
     try {
         const embed = new EmbedBuilder()
             .setTitle(title)
-            .setDescription(description.substring(0, 4000))
+            .setDescription(String(description).substring(0, 4000))
             .setColor(color)
             .setTimestamp();
         if (fields.length > 0) embed.addFields(fields);
         await consoleChannel.send({ embeds: [embed] });
-    } catch (e) {}
+    } catch (e) { /* silencieux */ }
 }
 
-/**
- * Vide le buffer de logs dans Discord
- */
 async function flushLogBuffer() {
     if (!consoleChannel || logBuffer.length === 0) return;
-
-    const embed = new EmbedBuilder()
-        .setTitle('📋 Logs de démarrage')
-        .setColor(0x5865F2)
-        .setTimestamp();
-
     const lines = logBuffer.map(l => l.message);
     const content = lines.join('\n');
 
-    if (content.length > 4000) {
-        // Découper en plusieurs messages
-        for (let i = 0; i < lines.length; i += 20) {
-            const chunk = lines.slice(i, i + 20).join('\n');
-            try {
-                await consoleChannel.send(`\`\`\`\n${chunk.substring(0, 1900)}\n\`\`\``);
-            } catch (e) {}
+    if (content.length > 3800) {
+        for (let i = 0; i < lines.length; i += 15) {
+            const chunk = lines.slice(i, i + 15).join('\n');
+            try { await consoleChannel.send(`\`\`\`\n${chunk.substring(0, 1900)}\n\`\`\``); } catch (e) {}
         }
     } else {
-        embed.setDescription(`\`\`\`\n${content}\n\`\`\``);
-        try { await consoleChannel.send({ embeds: [embed] }); } catch (e) {}
+        try {
+            await consoleChannel.send({
+                embeds: [new EmbedBuilder().setTitle('📋 Logs de démarrage').setColor(0x5865F2).setDescription(`\`\`\`\n${content}\n\`\`\``).setTimestamp()]
+            });
+        } catch (e) {}
     }
-
     logBuffer.length = 0;
 }
 
-// =============================================
-// REDIRECTION DES console.log / console.error
-// =============================================
-const originalConsoleLog = console.log;
-const originalConsoleError = console.error;
-const originalConsoleWarn = console.warn;
-
+// Redirection console.log / error / warn
 console.log = (...args) => {
-    originalConsoleLog.apply(console, args);
+    _consoleLog(...args);
+    if (isRedirecting) return;
+    isRedirecting = true;
     const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
-    // Ne pas re-log les messages qui viennent déjà de sendLog (éviter boucle)
-    if (!msg.includes('[INFO]') && !msg.includes('[SUCCESS]') && !msg.includes('[STARTUP]')) {
+    if (!msg.includes('[INFO]') && !msg.includes('[SUCCESS]') && !msg.includes('[STARTUP]') && !msg.includes('[CONSOLE]') && !msg.includes('[PTERO]')) {
         sendLog(msg, 'INFO').catch(() => {});
     }
+    isRedirecting = false;
 };
 
 console.error = (...args) => {
-    originalConsoleError.apply(console, args);
+    _consoleError(...args);
+    if (isRedirecting) return;
+    isRedirecting = true;
     const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ');
     if (!msg.includes('[ERROR]')) {
         sendLog(msg, 'ERROR').catch(() => {});
     }
+    isRedirecting = false;
 };
 
 console.warn = (...args) => {
-    originalConsoleWarn.apply(console, args);
+    _consoleWarn(...args);
+    if (isRedirecting) return;
+    isRedirecting = true;
     const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
     if (!msg.includes('[WARN]')) {
         sendLog(msg, 'WARN').catch(() => {});
     }
+    isRedirecting = false;
 };
 
 sendLog('Variables d\'environnement chargées', 'SUCCESS');
@@ -174,66 +165,132 @@ const client = new Client({
         GatewayIntentBits.GuildVoiceStates,
         GatewayIntentBits.GuildMessageReactions
     ],
-    partials: [
-        Partials.Channel,
-        Partials.Message,
-        Partials.User,
-        Partials.GuildMember,
-        Partials.Reaction
-    ]
+    partials: [Partials.Channel, Partials.Message, Partials.User, Partials.GuildMember, Partials.Reaction]
 });
 
 client.commands = new Collection();
 client.config = config;
-
-// Exposer les fonctions de log sur le client
 client.sendLog = sendLog;
 client.sendEmbedLog = sendEmbedLog;
 
 // =============================================
 // 2. ERREURS GLOBALES
 // =============================================
-client.on('error', (error) => {
-    sendLog(`[DISCORD] ${error.message}`, 'ERROR');
-});
-
-process.on('unhandledRejection', (error) => {
-    sendLog(`[UNHANDLED REJECTION] ${error?.stack || error}`, 'ERROR');
-});
-
-process.on('uncaughtException', (error) => {
-    sendLog(`[UNCAUGHT EXCEPTION] ${error?.stack || error}`, 'ERROR');
-});
+client.on('error', (error) => sendLog(`[DISCORD] ${error.message}`, 'ERROR'));
+process.on('unhandledRejection', (error) => sendLog(`[UNHANDLED REJECTION] ${error?.stack || error}`, 'ERROR'));
+process.on('uncaughtException', (error) => sendLog(`[UNCAUGHT EXCEPTION] ${error?.stack || error}`, 'ERROR'));
 
 // =============================================
-// 3. CONSOLE DISCORD (salon dédié)
+// 3. API PTERODACTYL
+// =============================================
+const PTeroPanelURL  = process.env.PTERO_PANEL_URL || 'https://panel.orinstone.deepstone.fr';
+const PTeroAPIKey    = process.env.PTERO_API_KEY;
+const PTeroServerID  = process.env.PTERO_SERVER_ID;
+
+class PteroAPI {
+    static isConfigured() { return !!(PTeroAPIKey && PTeroServerID); }
+
+    static request(method, endpoint, body = null) {
+        return new Promise((resolve, reject) => {
+            if (!this.isConfigured()) return reject(new Error('PTERO_API_KEY ou PTERO_SERVER_ID non configuré'));
+
+            const url = new URL(`/api/client/servers/${PTeroServerID}${endpoint}`, PTeroPanelURL);
+            const isHttps = url.protocol === 'https:';
+            const lib = isHttps ? https : http;
+
+            const options = {
+                hostname: url.hostname,
+                port: url.port || (isHttps ? 443 : 80),
+                path: url.pathname + url.search,
+                method,
+                headers: {
+                    'Authorization': `Bearer ${PTeroAPIKey}`,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                rejectUnauthorized: false
+            };
+
+            const req = lib.request(options, (res) => {
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => {
+                    if (res.statusCode >= 200 && res.statusCode < 300) {
+                        resolve({ success: true, status: res.statusCode, data: data ? JSON.parse(data) : null });
+                    } else {
+                        reject(new Error(`HTTP ${res.statusCode}: ${data.substring(0, 200)}`));
+                    }
+                });
+            });
+
+            req.on('error', (e) => reject(new Error(`Réseau: ${e.message}`)));
+            if (body) req.write(JSON.stringify(body));
+            req.end();
+        });
+    }
+
+    static restart()      { return this.request('POST', '/power', { signal: 'restart' }); }
+    static stop()         { return this.request('POST', '/power', { signal: 'stop' }); }
+    static kill()         { return this.request('POST', '/power', { signal: 'kill' }); }
+    static sendCmd(cmd)   { return this.request('POST', '/command', { command: cmd }); }
+    static getDetails()   { return this.request('GET', ''); }
+    static getResources() { return this.request('GET', '/resources'); }
+}
+
+sendLog(`Pterodactyl API: ${PteroAPI.isConfigured() ? '🟢 Configuré' : '🔴 Non configuré'}`, 'INFO');
+
+// =============================================
+// 4. CONSOLE DISCORD
 // =============================================
 const consoleSessions = new Map();
+const POWER_COOLDOWN = 30000;
+const powerCooldowns = new Map();
+
+function checkPowerCooldown(userId) {
+    const last = powerCooldowns.get(userId) || 0;
+    const now = Date.now();
+    if (now - last < POWER_COOLDOWN) {
+        return `⏳ Cooldown: attendez ${Math.ceil((POWER_COOLDOWN - (now - last)) / 1000)}s`;
+    }
+    powerCooldowns.set(userId, now);
+    return null;
+}
 
 const CONSOLE_COMMANDS = {
+
+    // --- AIDE ---
     help: {
         desc: 'Affiche cette aide',
         execute: () => [
-            '╔══════════════════════════════════════╗',
-            '║       📋 COMMANDES CONSOLE           ║',
-            '╠══════════════════════════════════════╣',
-            '║  help        → Cette aide            ║',
-            '║  status      → Statut du bot         ║',
-            '║  stats       → Statistiques          ║',
-            '║  uptime      → Temps fonctionnement  ║',
-            '║  memory      → Usage mémoire         ║',
-            '║  guilds      → Liste serveurs        ║',
-            '║  commands    → Slash commands        ║',
-            '║  logs [n]    → Derniers logs         ║',
-            '║  eval <code> → Exécuter JS ⚠️       ║',
-            '║  say <id> <msg> → Message salon     ║',
-            '║  broadcast <msg> → Tous serveurs    ║',
-            '║  restart     → Redémarrer le bot     ║',
-            '║  clear       → Effacer console       ║',
-            '║  close       → Fermer console        ║',
-            '╚══════════════════════════════════════╝'
+            '╔══════════════════════════════════════════╗',
+            '║         📋 COMMANDES CONSOLE             ║',
+            '╠══════════════════════════════════════════╣',
+            '║  help          → Cette aide              ║',
+            '║  status        → Statut du bot           ║',
+            '║  stats         → Statistiques            ║',
+            '║  uptime        → Temps fonctionnement    ║',
+            '║  memory        → Usage mémoire           ║',
+            '║  guilds        → Liste serveurs          ║',
+            '║  commands      → Slash commands          ║',
+            '║  logs [n]      → Derniers logs buffer    ║',
+            '║  eval <code>   → Exécuter JS ⚠️         ║',
+            '║  say <id> <msg>→ Message dans un salon  ║',
+            '║  broadcast <msg>→ Message tous serveurs ║',
+            '║                                          ║',
+            '║  ── 🔌 Pterodactyl ──                    ║',
+            '║  ptero         → Infos serveur Ptero     ║',
+            '║  restart       → Redémarrer (API Ptero)  ║',
+            '║  stop          → Arrêter (API Ptero)     ║',
+            '║  kill          → Force kill (API Ptero)  ║',
+            '║  cmd <cmd>     → Terminal Pterodactyl    ║',
+            '║                                          ║',
+            '║  clear         → Effacer la console      ║',
+            '║  close         → Fermer la console       ║',
+            '╚══════════════════════════════════════════╝'
         ].join('\n')
     },
+
+    // --- STATUT ---
     status: {
         desc: 'Statut du bot',
         execute: () => {
@@ -243,14 +300,17 @@ const CONSOLE_COMMANDS = {
                 '📊 **Statut du bot**',
                 `├── 🟢 En ligne`,
                 `├── 🏓 Latence: ${client.ws.ping}ms`,
-                `├──  Serveurs: ${client.guilds.cache.size}`,
+                `├── 🌐 Serveurs: ${client.guilds.cache.size}`,
                 `├── 👥 Users: ${client.users.cache.size}`,
                 `├── 📝 Commands: ${client.commands.size}`,
                 `├── ⏱️ Uptime: ${d}j ${h}h ${m}m`,
-                `└── 💻 Node: ${process.version}`
+                `├── 💻 Node: ${process.version}`,
+                `└── 🔌 Pterodactyl: ${PteroAPI.isConfigured() ? '🟢 Configuré' : '🔴 Non configuré'}`
             ].join('\n');
         }
     },
+
+    // --- STATISTIQUES ---
     stats: {
         desc: 'Statistiques détaillées',
         execute: () => {
@@ -268,40 +328,165 @@ const CONSOLE_COMMANDS = {
             ].join('\n');
         }
     },
+
+    // --- UPTIME ---
     uptime: {
-        desc: 'Uptime',
+        desc: 'Temps de fonctionnement',
         execute: () => {
             const u = process.uptime();
             return `⏱️ ${Math.floor(u / 86400)}j ${Math.floor((u % 86400) / 3600)}h ${Math.floor((u % 3600) / 60)}m ${Math.floor(u % 60)}s`;
         }
     },
+
+    // --- MÉMOIRE ---
     memory: {
-        desc: 'Mémoire',
+        desc: 'Usage mémoire',
         execute: () => {
             const m = process.memoryUsage();
             const f = b => `${(b / 1024 / 1024).toFixed(2)} MB`;
             return `💾 RSS: ${f(m.rss)} | Heap: ${f(m.heapUsed)}/${f(m.heapTotal)} | Ext: ${f(m.external)}`;
         }
     },
+
+    // --- SERVEURS ---
     guilds: {
-        desc: 'Serveurs',
-        execute: () => client.guilds.cache.map(g => `• **${g.name}** (${g.memberCount}) \`${g.id}\``).join('\n') || 'Aucun serveur'
-    },
-    commands: {
-        desc: 'Slash commands',
-        execute: () => client.commands.map(c => `• \`/${c.data.name}\` — ${c.data.description || '-'}`).join('\n') || 'Aucune commande'
-    },
-    logs: {
-        desc: 'Derniers logs',
-        execute: (args) => {
-            const n = parseInt(args[0]) || 10;
-            const recent = logBuffer.slice(-Math.min(n, 50));
-            if (!recent.length) return '📭 Aucun log en buffer';
-            return recent.map(l => l.message).join('\n');
+        desc: 'Liste des serveurs',
+        execute: () => {
+            const list = client.guilds.cache.map(g => `• **${g.name}** (${g.memberCount}) \`${g.id}\``);
+            return list.length ? list.join('\n') : 'Aucun serveur';
         }
     },
+
+    // --- COMMANDES SLASH ---
+    commands: {
+        desc: 'Liste slash commands',
+        execute: () => {
+            const list = client.commands.map(c => `• \`/${c.data.name}\` — ${c.data.description || '-'}`);
+            return list.length ? list.join('\n') : 'Aucune commande';
+        }
+    },
+
+    // --- LOGS ---
+    logs: {
+        desc: 'Derniers logs du buffer',
+        execute: (args) => {
+            const n = Math.min(parseInt(args[0]) || 10, 50);
+            const recent = logBuffer.slice(-n);
+            if (!recent.length) return '📭 Aucun log en buffer';
+            const text = recent.map(l => l.message).join('\n');
+            return `\`\`\`\n${text.substring(0, 1800)}\n\`\`\``;
+        }
+    },
+
+    // =============================================
+    // COMMANDES PTERODACTYL
+    // =============================================
+
+    ptero: {
+        desc: 'Infos serveur Pterodactyl',
+        execute: async () => {
+            if (!PteroAPI.isConfigured()) return '❌ API Pterodactyl non configurée\nAjoutez PTERO_API_KEY et PTERO_SERVER_ID dans le .env';
+            try {
+                const [details, resources] = await Promise.all([PteroAPI.getDetails(), PteroAPI.getResources()]);
+                const d = details.data?.attributes || {};
+                const r = resources.data?.attributes?.resources || {};
+
+                const fmtB = (b) => {
+                    if (!b || b === 0) return '0 MB';
+                    if (b > 1073741824) return `${(b / 1073741824).toFixed(2)} GB`;
+                    return `${(b / 1048576).toFixed(2)} MB`;
+                };
+
+                return [
+                    '🔌 **Serveur Pterodactyl**',
+                    `├──  Nom: ${d.name || 'N/A'}`,
+                    `├── 🟢 État: ${r.current_state || 'N/A'}`,
+                    `├── 💾 Mémoire: ${fmtB(r.memory_bytes)} / ${d.limits?.memory ? d.limits.memory + ' MB' : '∞'}`,
+                    `├── 💿 Disque: ${fmtB(r.disk_bytes)} / ${d.limits?.disk ? d.limits.disk + ' MB' : '∞'}`,
+                    `├── 🔲 CPU: ${r.cpu_absolute?.toFixed(2) || 0}%`,
+                    `├──  Réseau ↑: ${fmtB(r.network_tx_bytes)}`,
+                    `├── 🌐 Réseau ↓: ${fmtB(r.network_rx_bytes)}`,
+                    `└── 🆔 UUID: ${d.uuid || 'N/A'}`
+                ].join('\n');
+            } catch (e) {
+                return `❌ Erreur API: ${e.message}`;
+            }
+        }
+    },
+
+    restart: {
+        desc: 'Redémarrer via Pterodactyl',
+        execute: async (args, userId) => {
+            if (!PteroAPI.isConfigured()) return '❌ API Pterodactyl non configurée';
+            const cd = checkPowerCooldown(userId);
+            if (cd) return cd;
+
+            sendLog(`[PTERO] Restart demandé par ${userId}`, 'PTERO');
+            try {
+                await PteroAPI.restart();
+                return '🔄 **Restart envoyé via Pterodactyl !**\nLe bot va se couper et Pterodactyl le relancera.\n⏳ Délai: ~10-30 secondes';
+            } catch (e) {
+                return `❌ Erreur: ${e.message}`;
+            }
+        }
+    },
+
+    stop: {
+        desc: 'Arrêter via Pterodactyl',
+        execute: async (args, userId) => {
+            if (!PteroAPI.isConfigured()) return '❌ API Pterodactyl non configurée';
+            const cd = checkPowerCooldown(userId);
+            if (cd) return cd;
+
+            sendLog(`[PTERO] Stop demandé par ${userId}`, 'PTERO');
+            try {
+                await PteroAPI.stop();
+                return '🛑 **Stop envoyé via Pterodactyl !**\nLe bot va s\'arrêter proprement.\n⚠️ Relancez manuellement depuis le panel Pterodactyl.';
+            } catch (e) {
+                return `❌ Erreur: ${e.message}`;
+            }
+        }
+    },
+
+    kill: {
+        desc: 'Force kill via Pterodactyl',
+        execute: async (args, userId) => {
+            if (!PteroAPI.isConfigured()) return '❌ API Pterodactyl non configurée';
+            const cd = checkPowerCooldown(userId);
+            if (cd) return cd;
+
+            sendLog(`[PTERO] Kill demandé par ${userId}`, 'ERROR');
+            try {
+                await PteroAPI.kill();
+                return '💀 **Force kill envoyé via Pterodactyl !**\n⚠️ Processus tué brutalement. Risque de corruption.\nÀ utiliser en dernier recours uniquement.';
+            } catch (e) {
+                return `❌ Erreur: ${e.message}`;
+            }
+        }
+    },
+
+    cmd: {
+        desc: 'Commande terminal Pterodactyl',
+        execute: async (args) => {
+            if (!PteroAPI.isConfigured()) return '❌ API Pterodactyl non configurée';
+            const command = args.join(' ');
+            if (!command) return 'Usage: `cmd <commande>`\nEx: `cmd npm install`';
+            try {
+                await PteroAPI.sendCmd(command);
+                sendLog(`[PTERO] Commande envoyée: ${command}`, 'PTERO');
+                return `✅ Commande envoyée au terminal:\n\`\`\`\n${command}\n\`\`\``;
+            } catch (e) {
+                return `❌ Erreur: ${e.message}`;
+            }
+        }
+    },
+
+    // =============================================
+    // AUTRES COMMANDES
+    // =============================================
+
     eval: {
-        desc: 'Exécuter JS ⚠️',
+        desc: 'Exécuter du JavaScript ⚠️',
         execute: async (args) => {
             const code = args.join(' ');
             if (!code) return 'Usage: `eval <code>`';
@@ -309,11 +494,14 @@ const CONSOLE_COMMANDS = {
                 const result = await eval(code);
                 const out = typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result);
                 return `✅\n\`\`\`js\n${out.substring(0, 1800)}\n\`\`\``;
-            } catch (e) { return `❌\n\`\`\`\n${e.message}\n\`\`\``; }
+            } catch (e) {
+                return `❌\n\`\`\`\n${e.message}\n\`\`\``;
+            }
         }
     },
+
     say: {
-        desc: 'Message dans un salon',
+        desc: 'Envoyer un message dans un salon',
         execute: async (args) => {
             if (args.length < 2) return 'Usage: `say <channelId> <message>`';
             try {
@@ -324,8 +512,9 @@ const CONSOLE_COMMANDS = {
             } catch (e) { return `❌ ${e.message}`; }
         }
     },
+
     broadcast: {
-        desc: 'Message tous serveurs',
+        desc: 'Message sur tous les serveurs',
         execute: async (args) => {
             const msg = args.join(' ');
             if (!msg) return 'Usage: `broadcast <message>`';
@@ -336,29 +525,30 @@ const CONSOLE_COMMANDS = {
                     if (ch) { await ch.send(`📢 ${msg}`); sent++; }
                 } catch {}
             }
-            return `📢 Envoyé sur ${sent}/${client.guilds.cache.size} serveurs`;
+            return `📢 Envoyé sur **${sent}**/${client.guilds.cache.size} serveurs`;
         }
     },
-    restart: {
-        desc: 'Redémarrer',
-        execute: () => {
-            sendLog('Redémarrage demandé via console Discord', 'WARN');
-            setTimeout(() => process.exit(0), 2000);
-            return '🔄 Redémarrage dans 2s...';
-        }
-    },
-    clear: { desc: 'Effacer', execute: () => '__CLEAR__' },
-    close: { desc: 'Fermer', execute: () => '__CLOSE__' }
+
+    clear: { desc: 'Effacer la console', execute: () => '__CLEAR__' },
+    close: { desc: 'Fermer la console', execute: () => '__CLOSE__' }
 };
+
+// --- Fonctions console ---
 
 async function executeConsoleCmd(input, userId) {
     const parts = input.trim().split(/\s+/);
     const cmd = parts[0].toLowerCase();
     const args = parts.slice(1);
     const command = CONSOLE_COMMANDS[cmd];
-    if (!command) return `❌ Inconnu: \`${cmd}\`. Tapez \`help\`.`;
-    try { return await command.execute(args, userId); }
-    catch (e) { return `❌ ${e.message}`; }
+    if (!command) return `❌ Commande inconnue: \`${cmd}\`\nTapez \`help\` pour la liste.`;
+    try {
+        const result = await command.execute(args, userId);
+        sendLog(`[CONSOLE] /${cmd} par ${userId}`, 'CONSOLE');
+        return result;
+    } catch (e) {
+        sendLog(`[CONSOLE] Erreur /${cmd}: ${e.message}`, 'ERROR');
+        return `❌ Erreur: ${e.message}`;
+    }
 }
 
 function buildConsoleEmbed(history = []) {
@@ -369,13 +559,13 @@ function buildConsoleEmbed(history = []) {
         .setFooter({ text: 'help pour la liste • Owner uniquement' });
 
     if (!history.length) {
-        embed.setDescription('```diff\n+ Console prête. Tapez "help".\n```');
+        embed.setDescription('```diff\n+ Console prête. Tapez "help" pour commencer.\n```');
     } else {
         const recent = history.slice(-8);
         const lines = recent.map(e =>
             e.type === 'input'
                 ? `> ❯ ${e.content}`
-                : (e.content.length > 300 ? e.content.substring(0, 300) + '...' : e.content)
+                : (String(e.content).length > 300 ? String(e.content).substring(0, 300) + '...' : String(e.content))
         );
         const content = lines.join('\n');
         embed.setDescription(content.length > 3800 ? content.substring(content.length - 3800) : content);
@@ -408,15 +598,13 @@ client.CONSOLE_CHANNEL_ID = CONSOLE_CHANNEL_ID;
 sendLog(`Console Discord: Salon=${CONSOLE_CHANNEL_ID || 'NON CONFIGURÉ'} | Owners=${CONSOLE_OWNERS.length > 0 ? CONSOLE_OWNERS.join(',') : 'Tous'}`, 'INFO');
 
 // =============================================
-// 4. CHARGEUR DYNAMIQUE D'ÉVÉNEMENTS
+// 5. CHARGEUR D'ÉVÉNEMENTS
 // =============================================
 function loadEvents(dir) {
     const items = fs.readdirSync(dir, { withFileTypes: true });
     let count = 0;
-
     for (const item of items) {
         const fullPath = path.join(dir, item.name);
-
         if (item.isDirectory()) {
             count += loadEvents(fullPath);
         } else if (item.name.endsWith('.js')) {
@@ -424,10 +612,9 @@ function loadEvents(dir) {
                 delete require.cache[require.resolve(fullPath)];
                 const exported = require(fullPath);
                 const events = Array.isArray(exported) ? exported : [exported];
-
                 for (const event of events) {
                     if (!event.name || typeof event.execute !== 'function') {
-                        sendLog(`Event invalide ignoré: ${fullPath}`, 'WARN');
+                        sendLog(`Event invalide: ${path.basename(fullPath)}`, 'WARN');
                         continue;
                     }
                     if (event.once) {
@@ -438,7 +625,7 @@ function loadEvents(dir) {
                     count++;
                 }
             } catch (error) {
-                sendLog(`Erreur chargement event ${path.basename(fullPath)}: ${error.message}`, 'ERROR');
+                sendLog(`Erreur event ${path.basename(fullPath)}: ${error.message}`, 'ERROR');
             }
         }
     }
@@ -446,35 +633,31 @@ function loadEvents(dir) {
 }
 
 // =============================================
-// 5. CHARGEUR DYNAMIQUE DE COMMANDES
+// 6. CHARGEUR DE COMMANDES
 // =============================================
 function loadCommands(dir) {
     const items = fs.readdirSync(dir, { withFileTypes: true });
     let count = 0;
-
     for (const item of items) {
         const fullPath = path.join(dir, item.name);
-
         if (item.isDirectory()) {
             count += loadCommands(fullPath);
         } else if (item.name.endsWith('.js')) {
             try {
                 delete require.cache[require.resolve(fullPath)];
                 const command = require(fullPath);
-
                 if (!command.data || !command.execute) {
-                    sendLog(`Commande invalide ignorée: ${path.basename(fullPath)}`, 'WARN');
+                    sendLog(`Commande invalide: ${path.basename(fullPath)}`, 'WARN');
                     continue;
                 }
                 if (client.commands.has(command.data.name)) {
-                    sendLog(`DOUBLON DÉTECTÉ: "${command.data.name}" dans ${path.basename(fullPath)}`, 'ERROR');
+                    sendLog(`DOUBLON: "${command.data.name}" dans ${path.basename(fullPath)}`, 'ERROR');
                     continue;
                 }
-
                 client.commands.set(command.data.name, command);
                 count++;
             } catch (error) {
-                sendLog(`Erreur chargement commande ${path.basename(fullPath)}: ${error.message}`, 'ERROR');
+                sendLog(`Erreur commande ${path.basename(fullPath)}: ${error.message}`, 'ERROR');
             }
         }
     }
@@ -482,19 +665,18 @@ function loadCommands(dir) {
 }
 
 // =============================================
-// 6. ÉVÉNEMENT READY (intégré directement)
+// 7. ÉVÉNEMENT READY
 // =============================================
 client.once('clientReady', async () => {
-    sendLog(`Bot connecté en tant que ${client.user.tag}`, 'SUCCESS');
+    sendLog(`Bot connecté: ${client.user.tag}`, 'SUCCESS');
 
-    // Récupérer le salon console
     if (CONSOLE_CHANNEL_ID) {
         consoleChannel = client.channels.cache.get(CONSOLE_CHANNEL_ID);
         if (consoleChannel) {
             botReady = true;
-            sendLog(`Salon console trouvé: #${consoleChannel.name}`, 'SUCCESS');
+            sendLog(`Salon console: #${consoleChannel.name}`, 'SUCCESS');
 
-            // Envoyer un embed de démarrage
+            // Embed de démarrage
             const uptime = process.uptime();
             const embed = new EmbedBuilder()
                 .setTitle('🚀 Bot Démarré')
@@ -507,64 +689,63 @@ client.once('clientReady', async () => {
                     { name: '👥 Utilisateurs', value: `${client.users.cache.size}`, inline: true },
                     { name: '📝 Commandes', value: `${client.commands.size}`, inline: true },
                     { name: '💻 Node.js', value: process.version, inline: true },
-                    { name: '📦 discord.js', value: `v${require('discord.js').version}`, inline: true }
+                    { name: '📦 discord.js', value: `v${require('discord.js').version}`, inline: true },
+                    { name: '🔌 Pterodactyl', value: PteroAPI.isConfigured() ? '🟢 Connecté' : '🔴 Non configuré', inline: true }
                 )
                 .setTimestamp()
-                .setFooter({ text: 'Orinstone Bot v2.1' });
+                .setFooter({ text: 'Orinstone Bot v2.2' });
 
             try { await consoleChannel.send({ embeds: [embed] }); } catch (e) {}
-
-            // Vider le buffer de logs
             await flushLogBuffer();
-
         } else {
             sendLog(`Salon console ID ${CONSOLE_CHANNEL_ID} introuvable !`, 'ERROR');
+            botReady = true;
         }
     } else {
         sendLog('CONSOLE_CHANNEL_ID non configuré - logs Discord désactivés', 'WARN');
-        botReady = true; // Activer quand même pour le panel web
+        botReady = true;
     }
 });
 
 // =============================================
-// 7. DÉMARRAGE
+// 8. DÉMARRAGE
 // =============================================
 async function start() {
-    sendLog('Démarrage d\'Orinstone Bot v2.1...', 'STARTUP');
+    sendLog('Démarrage Orinstone Bot v2.2...', 'STARTUP');
 
-    // Charger les événements
+    // Événements
     const eventsPath = path.join(__dirname, 'events');
     if (fs.existsSync(eventsPath)) {
-        const eventCount = loadEvents(eventsPath);
-        sendLog(`${eventCount} événement(s) chargé(s)`, 'SUCCESS');
+        const n = loadEvents(eventsPath);
+        sendLog(`${n} événement(s) chargé(s)`, 'SUCCESS');
     } else {
         sendLog('Dossier events/ introuvable', 'WARN');
     }
 
-    // Charger les commandes
+    // Commandes
     const commandsPath = path.join(__dirname, 'commands');
     if (fs.existsSync(commandsPath)) {
-        const cmdCount = loadCommands(commandsPath);
-        sendLog(`${cmdCount} commande(s) chargée(s)`, 'SUCCESS');
+        const n = loadCommands(commandsPath);
+        sendLog(`${n} commande(s) chargée(s)`, 'SUCCESS');
     } else {
         sendLog('Dossier commands/ introuvable', 'WARN');
     }
 
-    // Démarrer le panel web
+    // Panel web
     try {
         const { startWebServer } = require('./managers/WebPanel');
         startWebServer(client);
-        sendLog(`Panel web démarré sur le port ${config.webPort}`, 'SUCCESS');
+        sendLog(`Panel web sur le port ${config.webPort}`, 'SUCCESS');
     } catch (error) {
-        sendLog(`Erreur démarrage panel web: ${error.message}`, 'ERROR');
+        sendLog(`Erreur panel web: ${error.message}`, 'ERROR');
     }
 
-    // Connexion à Discord
+    // Connexion Discord
     try {
-        sendLog('Connexion à Discord en cours...', 'STARTUP');
+        sendLog('Connexion Discord...', 'STARTUP');
         await client.login(config.token);
     } catch (error) {
-        sendLog(`Échec de connexion Discord: ${error.message}`, 'ERROR');
+        sendLog(`Échec connexion Discord: ${error.message}`, 'ERROR');
         process.exit(1);
     }
 }

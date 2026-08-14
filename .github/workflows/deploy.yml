@@ -96,11 +96,14 @@ jobs:
           DISCORD_GUILD_ID=${{ secrets.DISCORD_GUILD_ID }}
           BOT_PREFIX=${{ secrets.BOT_PREFIX || '!' }}
           PANEL_PASSWORD=${{ secrets.PANEL_PASSWORD }}
-          PANEL_BASE_URL=${{ secrets.PANEL_BASE_URL || 'https://hebergebot.deepstone.fr' }}
+          PANEL_BASE_URL=${{ secrets.PANEL_BASE_URL || 'https://node.orinstone.deepstone.fr:26162' }}
           PANEL_ALLOWED_ROLES=${{ secrets.PANEL_ALLOWED_ROLES || '' }}
           WEB_PORT=${{ secrets.WEB_PORT || '26162' }}
           CONSOLE_CHANNEL_ID=${{ secrets.CONSOLE_CHANNEL_ID || '' }}
           CONSOLE_OWNERS=${{ secrets.CONSOLE_OWNERS || '' }}
+          PTERO_API_KEY=${{ secrets.PTERO_API_KEY }}
+          PTERO_SERVER_ID=${{ secrets.PTERO_SERVER_ID }}
+          PTERO_PANEL_URL=${{ secrets.PTERO_PANEL_URL || 'https://panel.orinstone.deepstone.fr' }}
           ENVEOF"
 
       # --- Étape 3 : npm install + permissions ---
@@ -185,17 +188,17 @@ jobs:
         run: |
           PREV_TAG="${{ steps.tag_version.outputs.previous_tag }}"
           NEW_TAG="${{ steps.tag_version.outputs.new_tag }}"
-          
+
           if [ -z "$PREV_TAG" ] || [ "$PREV_TAG" = "null" ]; then
             LOG=$(git log HEAD --pretty=format:"- %s (%h)" --reverse | tail -20)
           else
             LOG=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%h)" --reverse)
           fi
-          
+
           if [ -z "$LOG" ]; then
             LOG="- Mise à jour automatique"
           fi
-          
+
           {
             echo 'changelog<<EOF'
             echo "$LOG"
@@ -209,17 +212,17 @@ jobs:
           name: "Release ${{ steps.tag_version.outputs.new_tag }}"
           body: |
             ## 🤖 Déploiement Bot Discord Orinstone
-            
+
             | Info | Valeur |
             |------|--------|
             | **Version** | `${{ steps.tag_version.outputs.new_tag }}` |
             | **Commit** | `${{ needs.deploy.outputs.commit_sha }}` |
             | **Message** | ${{ needs.deploy.outputs.commit_msg }} |
             | **Acteur** | @${{ github.actor }} |
-            
+
             ### 📋 Changelog
             ${{ steps.changelog.outputs.changelog }}
-            
+
             ---
             *Déploiement automatique via GitHub Actions*
           draft: false
