@@ -47,22 +47,18 @@ function createReglementEmbed() {
         .setTitle(reglementData.title || "📜 Règlement")
         .setDescription(reglementData.description || "");
 
-    // Couleur (accepte décimal ou hex)
     if (reglementData.color) {
         embed.setColor(reglementData.color);
     }
 
-    // Thumbnail (image en haut à droite)
     if (reglementData.thumbnail) {
         embed.setThumbnail(reglementData.thumbnail);
     }
 
-    // Image principale (optionnel)
     if (reglementData.image) {
         embed.setImage(reglementData.image);
     }
 
-    // Ajouter tous les champs du JSON
     if (Array.isArray(reglementData.fields)) {
         for (const field of reglementData.fields) {
             embed.addFields({
@@ -73,7 +69,6 @@ function createReglementEmbed() {
         }
     }
 
-    // Footer
     if (reglementData.footer && reglementData.footer.text) {
         const footerObj = { text: reglementData.footer.text };
         if (reglementData.footer.icon_url) {
@@ -82,12 +77,10 @@ function createReglementEmbed() {
         embed.setFooter(footerObj);
     }
 
-    // Timestamp
     if (reglementData.timestamp === true || reglementData.timestamp === "true") {
         embed.setTimestamp();
     }
 
-    // Auteur (optionnel)
     if (reglementData.author) {
         embed.setAuthor({
             name: reglementData.author.name || "",
@@ -96,7 +89,6 @@ function createReglementEmbed() {
         });
     }
 
-    // URL du titre (optionnel)
     if (reglementData.url) {
         embed.setURL(reglementData.url);
     }
@@ -875,7 +867,37 @@ const slashCommands = [
         .setDescription('Affiche une image de chat aléatoire'),
     new SlashCommandBuilder()
         .setName('dog')
-        .setDescription('Affiche une image de chien aléatoire')
+        .setDescription('Affiche une image de chien aléatoire'),
+
+    // NOUVELLES COMMANDES FUN
+    new SlashCommandBuilder()
+        .setName('joke')
+        .setDescription('Raconte une blague aléatoire'),
+    new SlashCommandBuilder()
+        .setName('rps')
+        .setDescription('Joue à Pierre-Feuille-Ciseaux contre le bot')
+        .addStringOption(opt => opt.setName('choix').setDescription('Ton choix').setRequired(true).addChoices(
+            { name: '🪨 Pierre', value: 'pierre' },
+            { name: '📄 Feuille', value: 'feuille' },
+            { name: '✂️ Ciseaux', value: 'ciseaux' }
+        )),
+    new SlashCommandBuilder()
+        .setName('meme')
+        .setDescription('Affiche un meme aléatoire'),
+    new SlashCommandBuilder()
+        .setName('hug')
+        .setDescription('Fais un câlin à un membre')
+        .addUserOption(opt => opt.setName('user').setDescription('Le membre à câliner').setRequired(true)),
+    new SlashCommandBuilder()
+        .setName('ship')
+        .setDescription('Calcule l\'affinité amoureuse entre deux membres')
+        .addUserOption(opt => opt.setName('user1').setDescription('Premier membre').setRequired(true))
+        .addUserOption(opt => opt.setName('user2').setDescription('Deuxième membre').setRequired(false)),
+
+    // SYSTÈME D'ATTRIBUTION DE RÔLE (Self-Role)
+    new SlashCommandBuilder()
+        .setName('getroles')
+        .setDescription('Envoie un panneau pour obtenir des rôles spécifiques')
 ];
 
 // --- ENREGISTREMENT DES SLASH COMMANDS ---
@@ -931,7 +953,7 @@ client.on('interactionCreate', async (interaction) => {
                     },
                     { 
                         name: "🎮 Fun",
-                        value: "`/8ball` `/roll` `/flip` `/cat` `/dog`",
+                        value: "`/8ball` `/roll` `/flip` `/cat` `/dog` `/joke` `/rps` `/meme` `/hug` `/ship`",
                         inline: true
                     },
                     { 
@@ -1301,6 +1323,131 @@ client.on('interactionCreate', async (interaction) => {
             } catch (e) {
                 return interaction.editReply('❌ Impossible de récupérer une image de chien.');
             }
+        }
+
+        // ============ NOUVELLES COMMANDES FUN ============
+        if (command === 'joke') {
+            const jokes = [
+                "Pourquoi les plongeurs plongent-ils toujours en arrière et jamais en avant ?\n*Parce que sinon ils tomberaient dans le bateau.* 🤣",
+                "Que fait une fraise sur un cheval ?\n*Tagada tagada !* 🍓🐎",
+                "C'est l'histoire d'un pingouin qui respire par les fesses.\nUn jour il s'assoit et il meurt. 🐧💀",
+                "Quel est le comble pour un électricien ?\n*De ne pas être au courant !* ⚡",
+                "Comment appelle-t-on un chien qui n'a pas de pattes ?\n*On ne l'appelle pas, on va le chercher.* 🐶",
+                "Que dit une imprimante dans l'eau ?\n*J'ai papier !* (J'ai pas pied) 🖨️💦",
+                "Pourquoi est-ce que les fantômes mentent si mal ?\n*Parce qu'on peut voir à travers eux !* 👻",
+                "Un mec rentre dans un café... et plouf ! ☕💦"
+            ];
+            const joke = jokes[Math.floor(Math.random() * jokes.length)];
+            const embed = new EmbedBuilder()
+                .setTitle("😂 Blague du jour")
+                .setDescription(joke)
+                .setColor(0xf1c40f)
+                .setFooter({ text: "Demandé par " + interaction.user.tag })
+                .setTimestamp();
+            return interaction.reply({ embeds: [embed] });
+        }
+
+        if (command === 'rps') {
+            const userChoice = interaction.options.getString('choix');
+            const choices = ['pierre', 'feuille', 'ciseaux'];
+            const emojis = { pierre: '🪨', feuille: '📄', ciseaux: '✂️' };
+            const botChoice = choices[Math.floor(Math.random() * choices.length)];
+            
+            let result = '';
+            let color = 0x3498db;
+            
+            if (userChoice === botChoice) {
+                result = "🤝 **Égalité !**";
+                color = 0xf1c40f;
+            } else if (
+                (userChoice === 'pierre' && botChoice === 'ciseaux') ||
+                (userChoice === 'feuille' && botChoice === 'pierre') ||
+                (userChoice === 'ciseaux' && botChoice === 'feuille')
+            ) {
+                result = "🎉 **Tu as gagné !**";
+                color = 0x2ecc71;
+            } else {
+                result = "💀 **Tu as perdu !**";
+                color = 0xe74c3c;
+            }
+            
+            const embed = new EmbedBuilder()
+                .setTitle("✊ Pierre - Feuille - Ciseaux ✋")
+                .setDescription(`**Ton choix :** ${emojis[userChoice]} ${userChoice}\n**Choix du bot :** ${emojis[botChoice]} ${botChoice}\n\n**Résultat :** ${result}`)
+                .setColor(color)
+                .setTimestamp();
+                
+            return interaction.reply({ embeds: [embed] });
+        }
+
+        if (command === 'meme') {
+            await interaction.deferReply();
+            try {
+                const res = await fetch('https://meme-api.com/gimme');
+                const data = await res.json();
+                if (data.nsfw) {
+                    return interaction.editReply('❌ Le meme récupéré est NSFW, veuillez réessayer.');
+                }
+                const embed = new EmbedBuilder()
+                    .setTitle(`😂 ${data.title}`)
+                    .setImage(data.url)
+                    .setColor(0xe67e22)
+                    .setFooter({ text: `👍 ${data.ups} | Subreddit: r/${data.subreddit}` })
+                    .setTimestamp();
+                return interaction.editReply({ embeds: [embed] });
+            } catch (e) {
+                return interaction.editReply('❌ Impossible de récupérer un meme pour le moment.');
+            }
+        }
+
+        if (command === 'hug') {
+            const target = interaction.options.getUser('user');
+            if (target.id === interaction.user.id) {
+                return interaction.reply({ content: "🫂 Tu te fais un câlin à toi-même... C'est un peu triste, non ? 😅", ephemeral: true });
+            }
+            
+            await interaction.deferReply();
+            try {
+                const res = await fetch('https://api.waifu.pics/sfw/hug');
+                const data = await res.json();
+                
+                const embed = new EmbedBuilder()
+                    .setTitle("🫕 Câlin !")
+                    .setDescription(`**${interaction.user.username}** fait un gros câlin à **${target.username}** ! 💖`)
+                    .setImage(data.url)
+                    .setColor(0xff69b4)
+                    .setTimestamp();
+                    
+                return interaction.editReply({ embeds: [embed], content: `${target}` });
+            } catch (e) {
+                return interaction.editReply('❌ Impossible de récupérer un gif de câlin.');
+            }
+        }
+        
+        if (command === 'ship') {
+            const user1 = interaction.options.getUser('user1');
+            const user2 = interaction.options.getUser('user2') || interaction.user;
+            
+            if (user1.id === user2.id) {
+                return interaction.reply({ content: "😅 Tu ne peux pas te ship avec toi-même !", ephemeral: true });
+            }
+            
+            const percentage = Math.floor(Math.random() * 101);
+            let emoji = '💔';
+            let text = "Pas fait pour s'entendre...";
+            
+            if (percentage >= 80) { emoji = '💖'; text = "Âmes sœurs ! C'est le grand amour !"; }
+            else if (percentage >= 60) { emoji = '💕'; text = "Très bonne compatibilité !"; }
+            else if (percentage >= 40) { emoji = '💞'; text = "Ça peut coller avec quelques efforts."; }
+            else if (percentage >= 20) { emoji = '💔'; text = "C'est pas gagné..."; }
+            
+            const embed = new EmbedBuilder()
+                .setTitle("💘 Test de Compatibilité")
+                .setDescription(`**${user1.username}** & **${user2.username}**\n\n${emoji} **${percentage}%** d'affinité !\n*${text}*`)
+                .setColor(0xff69b4)
+                .setTimestamp();
+                
+            return interaction.reply({ embeds: [embed] });
         }
 
         // ============ COMMANDES MODÉRATION ============
@@ -1711,7 +1858,7 @@ client.on('interactionCreate', async (interaction) => {
                 .setDescription("Commandes d'administration et modération.")
                 .setColor(0x3498db)
                 .addFields(
-                    { name: "⚙️ Configuration", value: "`/setchannel` `/settranscript` `/setstaff` `/setwelcome` `/setlogs` `/setstatus` `/setlevelup` `/setxp` `/setautorole` `/setup`", inline: false },
+                    { name: "⚙️ Configuration", value: "`/setchannel` `/settranscript` `/setstaff` `/setwelcome` `/setlogs` `/setstatus` `/setlevelup` `/setxp` `/setautorole` `/setup` `/getroles`", inline: false },
                     { name: "🏆 Niveaux", value: "`/addlevelrole` `/removelevelrole` `/resetrank`", inline: false },
                     { name: "🔨 Modération", value: "`/ban` `/kick` `/warn` `/clear` `/transfert` `/warnings`", inline: false },
                     { name: "📊 Statut", value: "`/status` `/refresh-status` `/botstatus`", inline: false },
@@ -1752,18 +1899,41 @@ client.on('interactionCreate', async (interaction) => {
                 });
             }
 
-            // Envoi du message et récupération de l'objet message
             const reply = await interaction.reply({ 
                 embeds: [embed], 
                 fetchReply: true 
             });
 
-            // Ajout de la réaction avec l'emoji personnalisé
             try {
                 await reply.react('1535995172419272774');
             } catch (error) {
                 console.error('Erreur ajout réaction règlement:', error);
             }
+        }
+
+        // ============ COMMANDE GET ROLES ============
+        if (command === 'getroles') {
+            if (!interaction.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
+                return interaction.reply({ content: '❌ Permissions insuffisantes (Gérer les rôles requis).', ephemeral: true });
+            }
+            
+            const embed = new EmbedBuilder()
+                .setTitle("🎭 Rôles Disponibles")
+                .setDescription("Cliquez sur le bouton ci-dessous pour obtenir vos rôles !\n\n**Rôles inclus :**\n- <@&1521937325595037906>\n- <@&1534896300414472312>")
+                .setColor(0x9b59b6)
+                .setFooter({ text: `${interaction.guild.name}` })
+                .setTimestamp();
+                
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('claim_roles')
+                    .setLabel('Obtenir les rôles')
+                    .setEmoji('🎁')
+                    .setStyle(ButtonStyle.Primary)
+            );
+            
+            await interaction.channel.send({ embeds: [embed], components: [row] });
+            return interaction.reply({ content: '✅ Panneau de rôles envoyé !', ephemeral: true });
         }
 
     } catch (error) {
@@ -1779,6 +1949,49 @@ client.on('interactionCreate', async (interaction) => {
 // --- GESTION DES BOUTONS ---
 client.on('interactionCreate', async (interaction) => {
     if (interaction.isButton()) {
+        
+        // ===== BOUTON OBTENTION DE RÔLES =====
+        if (interaction.customId === 'claim_roles') {
+            await interaction.deferReply({ ephemeral: true });
+            
+            const roleIds = ['1521937325595037906', '1534896300414472312'];
+            let addedRoles = [];
+            let alreadyHave = [];
+            
+            try {
+                for (const roleId of roleIds) {
+                    const role = interaction.guild.roles.cache.get(roleId);
+                    if (!role) continue;
+                    
+                    if (!interaction.member.roles.cache.has(roleId)) {
+                        await interaction.member.roles.add(role);
+                        addedRoles.push(role.name);
+                    } else {
+                        alreadyHave.push(role.name);
+                    }
+                }
+                
+                let message = '';
+                if (addedRoles.length > 0) {
+                    message += `✅ Vous avez reçu les rôles : **${addedRoles.join(', ')}** !`;
+                }
+                if (alreadyHave.length > 0 && addedRoles.length === 0) {
+                    message += `ℹ️ Vous possédez déjà ces rôles : **${alreadyHave.join(', ')}** !`;
+                } else if (alreadyHave.length > 0) {
+                    message += `\nℹ️ Vous aviez déjà : **${alreadyHave.join(', ')}**.`;
+                }
+                
+                if (addedRoles.length === 0 && alreadyHave.length === 0) {
+                    message = '❌ Les rôles configurés sont introuvables sur le serveur.';
+                }
+                
+                return interaction.editReply(message);
+            } catch (error) {
+                console.error('Erreur attribution rôles:', error);
+                return interaction.editReply('❌ Une erreur est survenue. Vérifiez que mon rôle est au-dessus des rôles à attribuer dans la hiérarchie.');
+            }
+        }
+
         // ===== TICKET SUPPORT CLASSIQUE =====
         if (interaction.customId === 'create_ticket') {
             await interaction.deferReply({ ephemeral: true });
@@ -2207,7 +2420,6 @@ client.on('roleUpdate', (oldRole, newRole) => {
 client.on('messageReactionAdd', async (reaction, user) => {
     if (user.bot) return;
     
-    // Si la réaction est partielle, on la récupère
     if (reaction.partial) {
         try {
             await reaction.fetch();
@@ -2217,11 +2429,9 @@ client.on('messageReactionAdd', async (reaction, user) => {
         }
     }
 
-    // Vérifie que c'est notre emoji sur un message du bot
     if (reaction.emoji.id === '1535995172419272774' && reaction.message.author.id === client.user.id) {
         console.log(`${user.tag} a réagi au règlement !`);
         
-        // Optionnel : envoyer un log
         const logEmbed = new EmbedBuilder()
             .setTitle("📜 Règlement Accepté")
             .setDescription(`${user} a accepté le règlement.`)
@@ -2233,4 +2443,3 @@ client.on('messageReactionAdd', async (reaction, user) => {
 
 // --- LANCEMENT ---
 client.login(config.token);
-
