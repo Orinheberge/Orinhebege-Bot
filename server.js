@@ -76,6 +76,196 @@ process.on('uncaughtException', (error) => {
 });
 
 // =============================================
+// CONSOLE DISCORD (via salon dédié)
+// =============================================
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+
+const CONSOLE_CHANNEL_ID = process.env.CONSOLE_CHANNEL_ID || null;
+const CONSOLE_OWNERS = (process.env.CONSOLE_OWNERS || '').split(',').map(id => id.trim()).filter(Boolean);
+
+// Sessions console : userId -> { channelId, messageId, history[] }
+const consoleSessions = new Map();
+
+// Commandes console
+const CONSOLE_COMMANDS = {
+    help: {
+        desc: 'Affiche cette aide',
+        execute: () => [
+            '╔══════════════════════════════════════╗',
+            '║       📋 COMMANDES CONSOLE           ║',
+            '╠══════════════════════════════════════╣',
+            '║  help        → Cette aide            ║',
+            '║  status      → Statut du bot         ║',
+            '║  stats       → Statistiques          ║',
+            '║  uptime      → Temps fonctionnement  ║',
+            '║  memory      → Usage mémoire         ║',
+            '║  guilds      → Liste serveurs        ║',
+            '║  commands    → Slash commands        ║',
+            '║  eval <code> → Exécuter JS ⚠️       ║',
+            '║  say <id> <msg> → Message salon     ║',
+            '║  broadcast <msg> → Tous serveurs    ║',
+            '║  restart     → Redémarrer le bot     ║',
+            '║  clear       → Effacer console       ║',
+            '║  close       → Fermer console        ║',
+            '╚══════════════════════════════════════╝'
+        ].join('\n')
+    },
+    status: {
+        desc: 'Statut du bot',
+        execute: () => {
+            const u = process.uptime();
+            const d = Math.floor(u / 86400), h = Math.floor((u % 86400) / 3600), m = Math.floor((u % 3600) / 60);
+            return [
+                '📊 **Statut du bot**',
+                `├── 🟢 En ligne`,
+                `├── 🏓 Latence: ${client.ws.ping}ms`,
+                `├──  Serveurs: ${client.guilds.cache.size}`,
+                `├── 👥 Users: ${client.users.cache.size}`,
+                `├── 📝 Commands: ${client.commands.size}`,
+                `├── ⏱️ Uptime: ${d}j ${h}h ${m}m`,
+                `└──  Node: ${process.version}`
+            ].join('\n');
+        }
+    },
+    stats: {
+        desc: 'Statistiques détaillées',
+        execute: () => {
+            const mem = process.memoryUsage();
+            const fmt = b => `${(b / 1024 / 1024).toFixed(2)} MB`;
+            const totalMembers = client.guilds.cache.reduce((a, g) => a + g.memberCount, 0);
+            return [
+                '📈 **Statistiques**',
+                `├── 🌐 Serveurs: ${client.guilds.cache.size}`,
+                `├── 👥 Membres: ${totalMembers.toLocaleString()}`,
+                `├── 📝 Commands: ${client.commands.size}`,
+                `├── 🏓 Ping: ${client.ws.ping}ms`,
+                `├──  RSS: ${fmt(mem.rss)}`,
+                `└── 💾 Heap: ${fmt(mem.heapUsed)}/${fmt(mem.heapTotal)}`
+            ].join('\n');
+        }
+    },
+    uptime: {
+        desc: 'Uptime',
+        execute: () => {
+            const u = process.uptime();
+            return `⏱️ ${Math.floor(u / 86400)}j ${Math.floor((u % 86400) / 3600)}h ${Math.floor((u % 3600) / 60)}m ${Math.floor(u % 60)}s`;
+        }
+    },
+    memory: {
+        desc: 'Mémoire',
+        execute: () => {
+            const m = process.memoryUsage();
+            const f = b => `${(b / 1024 / 1024).toFixed(2)} MB`;
+            return `💾 RSS: ${f(m.rss)} | Heap: ${f(m.heapUsed)}/${f(m.heapTotal)} | Ext: ${f(m.external)}`;
+        }
+    },
+    guilds: {
+        desc: 'Serveurs',
+        execute: () => client.guilds.cache.map(g => `• **${g.name}** (${g.memberCount}) \`${g.id}\``).join('\n') || 'Aucun serveur'
+    },
+    commands: {
+        desc: 'Slash commands',
+        execute: () => client.commands.map(c => `• \`/${c.data.name}\` — ${c.data.description || '-'}`).join('\n') || 'Aucune commande'
+    },
+    eval: {
+        desc: 'Exécuter JS ⚠️',
+        execute: async (args) => {
+            const code = args.join(' ');
+            if (!code) return 'Usage: `eval <code>`';
+            try {
+                const result = await eval(code);
+                const out = typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result);
+                return `✅\n\`\`\`js\n${out.substring(0, 1800)}\n\`\`\``;
+            } catch (e) { return `❌\n\`\`\`\n${e.message}\n\`\`\``; }
+        }
+    },
+    say: {
+        desc: 'Message dans un salon',
+        execute: async (args) => {
+            if (args.length < 2) return 'Usage: `say <channelId> <message>`';
+            try {
+                const ch = client.channels.cache.get(args[0]);
+                if (!ch) return `❌ Salon \`${args[0]}\` introuvable`;
+                await ch.send(args.slice(1).join(' '));
+                return `✅ Envoyé dans <#${args[0]}>`;
+            } catch (e) { return `❌ ${e.message}`; }
+        }
+    },
+    broadcast: {
+        desc: 'Message tous serveurs',
+        execute: async (args) => {
+            const msg = args.join(' ');
+            if (!msg) return 'Usage: `broadcast <message>`';
+            let sent = 0;
+            for (const g of client.guilds.cache.values()) {
+                try {
+                    const ch = g.systemChannel || g.channels.cache.find(c => c.type === 0);
+                    if (ch) { await ch.send(`📢 ${msg}`); sent++; }
+                } catch {}
+            }
+            return `📢 Envoyé sur ${sent}/${client.guilds.cache.size} serveurs`;
+        }
+    },
+    restart: {
+        desc: 'Redémarrer',
+        execute: () => { setTimeout(() => process.exit(0), 2000); return '🔄 Redémarrage dans 2s...'; }
+    },
+    clear: { desc: 'Effacer', execute: () => '__CLEAR__' },
+    close: { desc: 'Fermer', execute: () => '__CLOSE__' }
+};
+
+async function executeConsoleCmd(input, userId) {
+    const parts = input.trim().split(/\s+/);
+    const cmd = parts[0].toLowerCase();
+    const args = parts.slice(1);
+    const command = CONSOLE_COMMANDS[cmd];
+    if (!command) return `❌ Inconnu: \`${cmd}\`. Tapez \`help\`.`;
+    try { return await command.execute(args, userId); }
+    catch (e) { return `❌ ${e.message}`; }
+}
+
+function buildConsoleEmbed(history = []) {
+    const embed = new EmbedBuilder()
+        .setTitle('🖥️ Console Orinstone')
+        .setColor(0x2f3136)
+        .setTimestamp()
+        .setFooter({ text: 'help pour la liste • Owner uniquement' });
+
+    if (!history.length) {
+        embed.setDescription('```diff\n+ Console prête. Tapez "help".\n```');
+    } else {
+        const recent = history.slice(-8);
+        const lines = recent.map(e => e.type === 'input' ? `> ❯ ${e.content}` : (e.content.length > 300 ? e.content.substring(0, 300) + '...' : e.content));
+        const content = lines.join('\n');
+        embed.setDescription(content.length > 3800 ? content.substring(content.length - 3800) : content);
+    }
+    return embed;
+}
+
+function buildConsoleButtons() {
+    return new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('console_input').setLabel('Entrer commande').setEmoji('⌨️').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('console_help').setLabel('Aide').setEmoji('❓').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('console_clear').setLabel('Effacer').setEmoji('🧹').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('console_close').setLabel('Fermer').setEmoji('🔒').setStyle(ButtonStyle.Danger)
+    );
+}
+
+function isConsoleOwner(userId) {
+    // Si CONSOLE_OWNERS est vide, utiliser les owners du config ou autoriser tout le monde sur le salon
+    if (CONSOLE_OWNERS.length > 0) return CONSOLE_OWNERS.includes(userId);
+    return true; // Le salon lui-même est la protection
+}
+
+// Exposer sur le client pour accès depuis les events
+client.consoleSessions = consoleSessions;
+client.executeConsoleCmd = executeConsoleCmd;
+client.buildConsoleEmbed = buildConsoleEmbed;
+client.buildConsoleButtons = buildConsoleButtons;
+client.isConsoleOwner = isConsoleOwner;
+client.CONSOLE_CHANNEL_ID = CONSOLE_CHANNEL_ID;
+
+// =============================================
 // 3. CHARGEUR DYNAMIQUE D'ÉVÉNEMENTS
 // =============================================
 function loadEvents(dir) {

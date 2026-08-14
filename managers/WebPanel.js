@@ -121,28 +121,52 @@ function startWebServer(client) {
     // =============================================
     // PAGE ROUTES
     // =============================================
-    app.get('/login', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'login', 'index.html')));
-    app.get('/login/', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'login', 'index.html')));
+    app.get('/', requireDiscordAuth, (req, res) => 
+    res.sendFile(path.join(__dirname, '..', 'public', 'index.html'))
+);
 
-    app.get('/', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'index.html')));
+app.get('/features', requireDiscordAuth, (req, res) => 
+    res.sendFile(path.join(__dirname, '..', 'public', 'features', 'index.html'))
+);
+app.get('/features/', requireDiscordAuth, (req, res) => res.redirect('/features'));
 
-    app.get('/features', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'features', 'index.html')));
-    app.get('/features/', requireAuth, (req, res) => res.redirect('/features'));
+app.get('/status', requireDiscordAuth, (req, res) => 
+    res.sendFile(path.join(__dirname, '..', 'public', 'status', 'index.html'))
+);
+app.get('/status/', requireDiscordAuth, (req, res) => res.redirect('/status'));
 
-    app.get('/status', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'status', 'index.html')));
-    app.get('/status/', requireAuth, (req, res) => res.redirect('/status'));
+app.get('/config', requireDiscordAuth, (req, res) => 
+    res.sendFile(path.join(__dirname, '..', 'public', 'config', 'index.html'))
+);
+app.get('/config/', requireDiscordAuth, (req, res) => res.redirect('/config'));
 
-    app.get('/config', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'config', 'index.html')));
-    app.get('/config/', requireAuth, (req, res) => res.redirect('/config'));
+app.get('/about', requireDiscordAuth, (req, res) => 
+    res.sendFile(path.join(__dirname, '..', 'public', 'about', 'index.html'))
+);
+app.get('/about/', requireDiscordAuth, (req, res) => res.redirect('/about'));
 
-    app.get('/about', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'about', 'index.html')));
-    app.get('/about/', requireAuth, (req, res) => res.redirect('/about'));
+app.get('/automod', requireDiscordAuth, (req, res) => 
+    res.sendFile(path.join(__dirname, '..', 'public', 'automod', 'index.html'))
+);
+app.get('/automod/', requireDiscordAuth, (req, res) => res.redirect('/automod'));
 
-    app.get('/automod', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'automod', 'index.html')));
-    app.get('/automod/', requireAuth, (req, res) => res.redirect('/automod'));
+app.get('/console', requireDiscordAuth, (req, res) => 
+    res.sendFile(path.join(__dirname, '..', 'public', 'console', 'index.html'))
+);
+app.get('/console/', requireDiscordAuth, (req, res) => res.redirect('/console'));
 
-    app.get('/console', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'console', 'index.html')));
-    app.get('/console/', requireAuth, (req, res) => res.redirect('/console'));
+const authApi = (req, res, next) => {
+    // Système Discord OAuth2
+    const sessionToken = req.cookies?.panelSession;
+    const session = DiscordAuth.verifySession(sessionToken);
+    if (session) {
+        req.userSession = session;
+        return next();
+    }
+    // Fallback ancien système
+    if (isAuthenticated(req)) return next();
+    return res.status(401).json({ success: false, error: 'Non authentifié' });
+};
 
     // =============================================
     // CRÉATION DU SERVEUR HTTP (nécessaire pour WebSocket)

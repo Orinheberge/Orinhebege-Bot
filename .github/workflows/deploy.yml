@@ -47,6 +47,7 @@ jobs:
           [ -z "${{ secrets.SSH_PASSWORD }}" ] && MISSING="$MISSING SSH_PASSWORD"
           [ -z "${{ secrets.DISCORD_TOKEN }}" ] && MISSING="$MISSING DISCORD_TOKEN"
           [ -z "${{ secrets.DISCORD_CLIENT_ID }}" ] && MISSING="$MISSING DISCORD_CLIENT_ID"
+          [ -z "${{ secrets.DISCORD_CLIENT_SECRET }}" ] && MISSING="$MISSING DISCORD_CLIENT_SECRET"
           [ -z "${{ secrets.DISCORD_GUILD_ID }}" ] && MISSING="$MISSING DISCORD_GUILD_ID"
           [ -z "${{ secrets.PANEL_PASSWORD }}" ] && MISSING="$MISSING PANEL_PASSWORD"
           [ -z "${{ secrets.PTERO_API_KEY }}" ] && MISSING="$MISSING PTERO_API_KEY"
@@ -76,6 +77,7 @@ jobs:
             --exclude='config.json' \
             --exclude='.gitignore' \
             --exclude='README.md' \
+            --exclude='lastRestart.json' \
             -e "ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10" \
             ./ \
             ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/
@@ -90,10 +92,15 @@ jobs:
             "cat > ${{ env.DEPLOY_PATH }}/.env << 'ENVEOF'
           DISCORD_TOKEN=${{ secrets.DISCORD_TOKEN }}
           DISCORD_CLIENT_ID=${{ secrets.DISCORD_CLIENT_ID }}
+          DISCORD_CLIENT_SECRET=${{ secrets.DISCORD_CLIENT_SECRET }}
           DISCORD_GUILD_ID=${{ secrets.DISCORD_GUILD_ID }}
           BOT_PREFIX=${{ secrets.BOT_PREFIX || '!' }}
           PANEL_PASSWORD=${{ secrets.PANEL_PASSWORD }}
+          PANEL_BASE_URL=${{ secrets.PANEL_BASE_URL || 'https://hebergebot.deepstone.fr' }}
+          PANEL_ALLOWED_ROLES=${{ secrets.PANEL_ALLOWED_ROLES || '' }}
           WEB_PORT=${{ secrets.WEB_PORT || '26162' }}
+          CONSOLE_CHANNEL_ID=${{ secrets.CONSOLE_CHANNEL_ID || '' }}
+          CONSOLE_OWNERS=${{ secrets.CONSOLE_OWNERS || '' }}
           ENVEOF"
 
       # --- Étape 3 : npm install + permissions ---
@@ -131,7 +138,7 @@ jobs:
             echo "🔄 Tentative de restart via SSH..."
           fi
 
-      # --- Étape 5 : Fallback restart via SSH (seulement si API échoue) ---
+      # --- Étape 5 : Fallback restart via SSH ---
       - name: Fallback restart via SSH
         if: failure()
         env:
