@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="/assets/css/style.css">
 </head>
-<body class="text-white flex items-center justify-center">
+<body class="text-white flex items-center justify-center min-h-screen">
     <div class="max-w-md w-full mx-4 fade-in">
         <div class="glass rounded-2xl p-8 card-hover">
             <div class="text-center mb-8">
@@ -63,6 +63,7 @@
 
                 if (data.success) {
                     localStorage.setItem('panelToken', data.token);
+                    // ✅ Redirection vers dashboard avec token
                     window.location.href = '/?token=' + encodeURIComponent(data.token);
                 } else {
                     errorDiv.textContent = data.error || 'Erreur inconnue';

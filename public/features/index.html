@@ -12,6 +12,7 @@
 <body class="text-white">
     <div id="notification" class="hidden fixed top-20 right-6 z-50 px-6 py-3 rounded-lg shadow-lg text-white"></div>
 
+    <!-- ✅ Navbar complète avec tous les liens -->
     <nav class="glass sticky top-0 z-40 px-6 py-4 flex justify-between items-center">
         <div class="flex items-center gap-3">
             <i class="fa-solid fa-cube text-purple-400 text-2xl"></i>
@@ -20,24 +21,49 @@
         <div class="flex gap-4 items-center text-sm">
             <a href="/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-house mr-1"></i> Accueil</a>
             <a href="/features/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-sliders mr-1"></i> Features</a>
-             <a href="/automod/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-shield-halved mr-1"></i> AutoMod</a>
+            <a href="/automod/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-shield-halved mr-1"></i> AutoMod</a>
             <a href="/status/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-signal mr-1"></i> Statuts</a>
             <a href="/config/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-gear mr-1"></i> Config</a>
+            <a href="/about/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-circle-info mr-1"></i> À propos</a>
             <button onclick="logout()" class="bg-red-500/80 hover:bg-red-600 px-4 py-2 rounded-lg transition text-xs font-medium"><i class="fa-solid fa-right-from-bracket"></i></button>
         </div>
     </nav>
 
     <div class="container mx-auto px-6 py-8">
-        <div class="mb-8 fade-in">
-            <h1 class="text-4xl font-bold mb-2"><i class="fa-solid fa-sliders text-purple-400 mr-2"></i>Fonctionnalités</h1>
-            <p class="text-gray-400">Activez ou désactivez les différents modules du bot en temps réel</p>
+
+        <!-- Header + Compteur global -->
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 fade-in gap-4">
+            <div>
+                <h1 class="text-4xl font-bold mb-2"><i class="fa-solid fa-sliders text-purple-400 mr-2"></i>Fonctionnalités</h1>
+                <p class="text-gray-400">Activez ou désactivez les différents modules du bot en temps réel</p>
+            </div>
+            <div class="glass rounded-xl px-5 py-3 flex items-center gap-3 shrink-0">
+                <div class="bg-green-500/20 p-2 rounded-lg">
+                    <i class="fa-solid fa-circle-check text-green-400"></i>
+                </div>
+                <div>
+                    <p class="text-gray-400 text-xs">Modules actifs</p>
+                    <p class="text-xl font-bold" id="globalCounter">-- / --</p>
+                </div>
+            </div>
         </div>
 
+        <!-- Grille des fonctionnalités -->
         <div id="featuresGrid" class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div class="col-span-full text-center py-12 text-gray-400">
                 <i class="fa-solid fa-spinner fa-spin text-2xl mb-3"></i>
                 <p>Chargement des fonctionnalités...</p>
             </div>
+        </div>
+
+        <!-- Info footer -->
+        <div class="glass rounded-xl p-5 mt-8 text-center fade-in">
+            <p class="text-gray-400 text-sm">
+                <i class="fa-solid fa-bolt text-yellow-400 mr-1"></i>
+                Les modifications sont appliquées <strong class="text-white">instantanément</strong> sans redémarrage du bot.
+                Consultez la vue d'ensemble sur la page
+                <a href="/config/" class="text-purple-400 hover:underline">Configuration</a>.
+            </p>
         </div>
     </div>
 
@@ -48,31 +74,48 @@
     <script src="/assets/js/script.js"></script>
     <script>
         const FEATURES_CONFIG = [
-            { key: 'xpMessages', name: 'XP Messages', icon: 'fa-message', desc: 'Attribution d\'XP lors de l\'envoi de messages', color: 'blue' },
-            { key: 'xpVoice', name: 'XP Vocal', icon: 'fa-microphone', desc: 'Attribution d\'XP toutes les minutes en vocal', color: 'green' },
-            { key: 'welcomeMessages', name: 'Messages de bienvenue', icon: 'fa-hand-wave', desc: 'Envoi d\'un message à l\'arrivée des nouveaux membres', color: 'emerald' },
-            { key: 'leaveMessages', name: 'Messages de départ', icon: 'fa-door-open', desc: 'Envoi d\'un message quand un membre quitte', color: 'orange' },
-            { key: 'logs', name: 'Logs du serveur', icon: 'fa-file-lines', desc: 'Enregistrement des événements dans le salon dédié', color: 'purple' },
-            { key: 'tickets', name: 'Système de tickets', icon: 'fa-ticket', desc: 'Création et gestion des tickets de support', color: 'indigo' },
-            { key: 'statusServices', name: 'Statut des services', icon: 'fa-signal', desc: 'Affichage du statut des services hébergés', color: 'cyan' },
-            { key: 'botStatusRotation', name: 'Rotation du statut', icon: 'fa-rotate', desc: 'Changement automatique du statut du bot', color: 'pink' },
-            { key: 'levelUpNotifications', name: 'Notifications Level Up', icon: 'fa-arrow-up', desc: 'Annonce quand un membre monte de niveau', color: 'yellow' },
-            { key: 'reactionReglement', name: 'Réaction Règlement', icon: 'fa-scroll', desc: 'Logs des réactions sur le message du règlement', color: 'amber' }
+            { key: 'xpMessages',           name: 'XP Messages',             icon: 'fa-message',      desc: 'Attribution d\'XP lors de l\'envoi de messages',              color: 'blue' },
+            { key: 'xpVoice',              name: 'XP Vocal',                icon: 'fa-microphone',   desc: 'Attribution d\'XP toutes les minutes en vocal',               color: 'green' },
+            { key: 'welcomeMessages',      name: 'Messages de bienvenue',   icon: 'fa-hand-wave',    desc: 'Envoi d\'un message à l\'arrivée des nouveaux membres',       color: 'emerald' },
+            { key: 'leaveMessages',        name: 'Messages de départ',      icon: 'fa-door-open',    desc: 'Envoi d\'un message quand un membre quitte le serveur',       color: 'orange' },
+            { key: 'logs',                 name: 'Logs du serveur',         icon: 'fa-file-lines',   desc: 'Enregistrement des événements dans le salon dédié',           color: 'purple' },
+            { key: 'tickets',              name: 'Système de tickets',      icon: 'fa-ticket',       desc: 'Création et gestion des tickets de support',                  color: 'indigo' },
+            { key: 'statusServices',       name: 'Statut des services',     icon: 'fa-signal',       desc: 'Affichage du statut des services hébergés en temps réel',     color: 'cyan' },
+            { key: 'botStatusRotation',    name: 'Rotation du statut',      icon: 'fa-rotate',       desc: 'Changement automatique du statut Discord du bot',             color: 'pink' },
+            { key: 'levelUpNotifications', name: 'Notifications Level Up',  icon: 'fa-arrow-up',     desc: 'Annonce dans le salon dédié quand un membre monte de niveau', color: 'yellow' },
+            { key: 'reactionReglement',    name: 'Réaction Règlement',      icon: 'fa-scroll',       desc: 'Logs des réactions sur le message du règlement',              color: 'amber' }
         ];
+
+        /**
+         * Met à jour le compteur global en haut de page
+         */
+        function updateGlobalCounter(features) {
+            const total   = FEATURES_CONFIG.length;
+            const enabled = FEATURES_CONFIG.filter(f => features[f.key] !== false).length;
+            const el = document.getElementById('globalCounter');
+            if (el) {
+                el.textContent = `${enabled} / ${total}`;
+                el.className = `text-xl font-bold ${enabled === total ? 'text-green-400' : enabled > 0 ? 'text-yellow-400' : 'text-red-400'}`;
+            }
+        }
 
         (async () => {
             try {
-                const data = await Panel.api('/api/status');
+                const data     = await Panel.api('/api/status');
                 const features = data.features || {};
-                const grid = document.getElementById('featuresGrid');
+                const grid     = document.getElementById('featuresGrid');
                 grid.innerHTML = '';
 
+                // Compteur initial
+                updateGlobalCounter(features);
+
+                // Génération des cartes
                 FEATURES_CONFIG.forEach((f, i) => {
-                    const isEnabled = features[f.key] !== false;
+                    const isEnabled  = features[f.key] !== false;
                     const delayClass = `fade-in-delay-${Math.min(i % 3 + 1, 3)}`;
 
                     grid.innerHTML += `
-                        <div class="glass rounded-xl p-6 card-hover fade-in ${delayClass}">
+                        <div class="glass rounded-xl p-6 card-hover fade-in ${delayClass}" id="card-${f.key}">
                             <div class="flex items-start justify-between">
                                 <div class="flex items-start gap-4 flex-1">
                                     <div class="bg-${f.color}-500/20 p-3 rounded-lg shrink-0">
@@ -81,13 +124,19 @@
                                     <div class="flex-1">
                                         <h3 class="font-bold text-lg">${f.name}</h3>
                                         <p class="text-gray-400 text-sm mt-1">${f.desc}</p>
-                                        <span id="status-${f.key}" class="inline-block mt-2 px-2 py-1 text-xs rounded-full ${isEnabled ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}">
+                                        <span id="status-${f.key}"
+                                            class="inline-block mt-2 px-2 py-1 text-xs rounded-full font-medium transition-all duration-300
+                                            ${isEnabled ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}">
                                             ${isEnabled ? '✓ Activé' : '✗ Désactivé'}
                                         </span>
                                     </div>
                                 </div>
                                 <label class="relative inline-flex items-center cursor-pointer shrink-0 ml-3">
-                                    <input type="checkbox" class="sr-only peer toggle-checkbox" data-feature="${f.key}" ${isEnabled ? 'checked' : ''}>
+                                    <input type="checkbox"
+                                        class="sr-only peer toggle-checkbox"
+                                        data-feature="${f.key}"
+                                        data-name="${f.name}"
+                                        ${isEnabled ? 'checked' : ''}>
                                     <div class="toggle-label relative w-14 h-7 bg-gray-600 rounded-full peer-checked:bg-green-500 transition">
                                         <div class="toggle-dot absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition"></div>
                                     </div>
@@ -96,12 +145,17 @@
                         </div>`;
                 });
 
-                // Bind toggles
+                // Bind des toggles
                 document.querySelectorAll('.toggle-checkbox').forEach(toggle => {
                     toggle.addEventListener('change', async (e) => {
-                        const feature = e.target.dataset.feature;
-                        const enabled = e.target.checked;
+                        const feature  = e.target.dataset.feature;
+                        const name     = e.target.dataset.name;
+                        const enabled  = e.target.checked;
                         const statusEl = document.getElementById(`status-${feature}`);
+                        const cardEl   = document.getElementById(`card-${feature}`);
+
+                        // Feedback visuel immédiat (optimiste)
+                        if (cardEl) cardEl.style.opacity = '0.6';
 
                         try {
                             const res = await Panel.api('/api/feature', {
@@ -110,22 +164,51 @@
                             });
 
                             if (res.success) {
-                                Panel.notify(enabled ? `✅ ${feature} activé !` : `❌ ${feature} désactivé`, enabled ? 'success' : 'info');
+                                // Mise à jour du badge
                                 statusEl.textContent = enabled ? '✓ Activé' : '✗ Désactivé';
-                                statusEl.className = `inline-block mt-2 px-2 py-1 text-xs rounded-full ${enabled ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`;
+                                statusEl.className = `inline-block mt-2 px-2 py-1 text-xs rounded-full font-medium transition-all duration-300 ${
+                                    enabled ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'
+                                }`;
+
+                                // Notification avec le nom français
+                                Panel.notify(
+                                    enabled ? `✅ ${name} activé !` : `❌ ${name} désactivé`,
+                                    enabled ? 'success' : 'info'
+                                );
+
+                                // Mise à jour du compteur global
+                                const currentFeatures = {};
+                                document.querySelectorAll('.toggle-checkbox').forEach(t => {
+                                    currentFeatures[t.dataset.feature] = t.checked;
+                                });
+                                updateGlobalCounter(currentFeatures);
+
                             } else {
+                                // Rollback
                                 e.target.checked = !enabled;
                                 Panel.notify(res.error || 'Erreur serveur', 'error');
                             }
                         } catch (err) {
+                            // Rollback
                             e.target.checked = !enabled;
-                            Panel.notify('Erreur de connexion', 'error');
+                            Panel.notify('Erreur de connexion au serveur', 'error');
+                        } finally {
+                            if (cardEl) cardEl.style.opacity = '1';
                         }
                     });
                 });
 
             } catch (e) {
-                document.getElementById('featuresGrid').innerHTML = '<p class="col-span-full text-red-400 text-center py-12">Erreur lors du chargement des fonctionnalités.</p>';
+                console.error('Erreur chargement features:', e);
+                document.getElementById('featuresGrid').innerHTML = `
+                    <div class="col-span-full glass rounded-xl p-12 text-center">
+                        <i class="fa-solid fa-triangle-exclamation text-red-400 text-4xl mb-4"></i>
+                        <p class="text-red-400 text-lg">Erreur lors du chargement des fonctionnalités.</p>
+                        <p class="text-gray-500 text-sm mt-2">Vérifiez que le bot est bien connecté.</p>
+                        <button onclick="location.reload()" class="mt-4 bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-lg transition text-sm">
+                            <i class="fa-solid fa-arrows-rotate mr-1"></i> Réessayer
+                        </button>
+                    </div>`;
             }
         })();
     </script>

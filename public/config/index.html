@@ -12,6 +12,7 @@
 <body class="text-white">
     <div id="notification" class="hidden fixed top-20 right-6 z-50 px-6 py-3 rounded-lg shadow-lg text-white"></div>
 
+    <!-- ✅ Navbar avec lien AutoMod ajouté -->
     <nav class="glass sticky top-0 z-40 px-6 py-4 flex justify-between items-center">
         <div class="flex items-center gap-3">
             <i class="fa-solid fa-cube text-purple-400 text-2xl"></i>
@@ -20,8 +21,10 @@
         <div class="flex gap-4 items-center text-sm">
             <a href="/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-house mr-1"></i> Accueil</a>
             <a href="/features/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-sliders mr-1"></i> Features</a>
+            <a href="/automod/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-shield-halved mr-1"></i> AutoMod</a>
             <a href="/status/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-signal mr-1"></i> Statuts</a>
             <a href="/config/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-gear mr-1"></i> Config</a>
+            <a href="/about/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-circle-info mr-1"></i> À propos</a>
             <button onclick="logout()" class="bg-red-500/80 hover:bg-red-600 px-4 py-2 rounded-lg transition text-xs font-medium"><i class="fa-solid fa-right-from-bracket"></i></button>
         </div>
     </nav>
@@ -52,6 +55,7 @@
                 const cfg = data.config || {};
                 const container = document.getElementById('configContent');
 
+                // === Rôles de niveau ===
                 const levelRoles = cfg.levelRoles || {};
                 const levelRolesHTML = Object.entries(levelRoles).length > 0
                     ? Object.entries(levelRoles).map(([lvl, roleId]) =>
@@ -62,28 +66,79 @@
                       ).join('')
                     : '<p class="text-gray-500 italic">Aucun rôle de niveau configuré</p>';
 
+                // === Salons configurés ===
                 const channels = [
-                    { label: 'Tickets', value: cfg.ticketCategory, icon: 'fa-ticket' },
-                    { label: 'Transcripts', value: cfg.transcriptChannel, icon: 'fa-file-lines' },
-                    { label: 'Bienvenue', value: cfg.welcomeChannel, icon: 'fa-hand-wave' },
-                    { label: 'Logs', value: cfg.logsChannel, icon: 'fa-file-lines' },
-                    { label: 'Statuts', value: cfg.statusChannel, icon: 'fa-signal' },
-                    { label: 'Level Up', value: cfg.levelupChannel, icon: 'fa-arrow-up' }
+                    { label: 'Tickets',      value: cfg.ticketCategory,    icon: 'fa-ticket' },
+                    { label: 'Transcripts',  value: cfg.transcriptChannel, icon: 'fa-file-lines' },
+                    { label: 'Bienvenue',    value: cfg.welcomeChannel,    icon: 'fa-hand-wave' },
+                    { label: 'Logs',         value: cfg.logsChannel,       icon: 'fa-file-lines' },
+                    { label: 'Statuts',      value: cfg.statusChannel,     icon: 'fa-signal' },
+                    { label: 'Level Up',     value: cfg.levelupChannel,    icon: 'fa-arrow-up' }
                 ];
 
                 const channelsHTML = channels.map(c => `
                     <div class="bg-slate-800 rounded-lg p-4 flex items-center gap-3">
-                        <i class="fa-solid ${c.icon} text-gray-400"></i>
-                        <div class="flex-1">
+                        <i class="fa-solid ${c.icon} text-gray-400 w-5 text-center"></i>
+                        <div class="flex-1 min-w-0">
                             <p class="text-gray-400 text-xs">${c.label}</p>
-                            <p class="font-mono text-sm ${c.value ? 'text-white' : 'text-gray-600'}">${c.value || 'Non configuré'}</p>
+                            <p class="font-mono text-sm truncate ${c.value ? 'text-white' : 'text-gray-600'}">${c.value || 'Non configuré'}</p>
                         </div>
-                        ${c.value ? '<i class="fa-solid fa-check text-green-400 text-xs"></i>' : ''}
+                        ${c.value ? '<i class="fa-solid fa-check text-green-400 text-xs shrink-0"></i>' : '<i class="fa-solid fa-xmark text-gray-600 text-xs shrink-0"></i>'}
                     </div>
                 `).join('');
 
+                // === Fonctionnalités actives ===
+                const features = cfg.features || {};
+                const featureLabels = {
+                    xpMessages:           'XP Messages',
+                    xpVoice:              'XP Vocal',
+                    welcomeMessages:      'Bienvenue',
+                    leaveMessages:        'Départs',
+                    logs:                 'Logs',
+                    tickets:              'Tickets',
+                    statusServices:       'Statut services',
+                    botStatusRotation:    'Rotation statut',
+                    levelUpNotifications: 'Level Up',
+                    reactionReglement:    'Réaction règlement'
+                };
+
+                const featuresHTML = Object.entries(featureLabels).map(([key, label]) => {
+                    const enabled = features[key] !== false;
+                    return `
+                        <div class="flex items-center justify-between bg-slate-800/50 rounded-lg px-4 py-2.5">
+                            <span class="text-sm text-gray-300">${label}</span>
+                            <span class="text-xs px-2 py-0.5 rounded-full font-medium ${enabled ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}">
+                                ${enabled ? '✓ Actif' : '✗ Inactif'}
+                            </span>
+                        </div>`;
+                }).join('');
+
+                // === AutoMod résumé ===
+                const automod = cfg.automod || {};
+                const automodFilters = {
+                    badWords:    'Mots interdits',
+                    links:       'Liens externes',
+                    invites:     'Invitations Discord',
+                    caps:        'Abus majuscules',
+                    spam:        'Anti-spam',
+                    massMention: 'Mass mention'
+                };
+
+                const automodHTML = Object.entries(automodFilters).map(([key, label]) => {
+                    const filterCfg = automod[key] || {};
+                    const enabled = filterCfg.enabled === true;
+                    return `
+                        <div class="flex items-center justify-between bg-slate-800/50 rounded-lg px-4 py-2.5">
+                            <span class="text-sm text-gray-300">${label}</span>
+                            <span class="text-xs px-2 py-0.5 rounded-full font-medium ${enabled ? 'bg-green-500/20 text-green-300' : 'bg-gray-600/30 text-gray-400'}">
+                                ${enabled ? '✓ Actif' : '— Inactif'}
+                            </span>
+                        </div>`;
+                }).join('');
+
                 container.innerHTML = `
-                    <!-- XP & Niveaux -->
+
+                    <!-- ==================== XP & NIVEAUX ==================== -->
                     <div class="glass rounded-xl p-8">
                         <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
                             <i class="fa-solid fa-star text-yellow-400"></i> XP & Niveaux
@@ -108,7 +163,7 @@
                         </div>
                     </div>
 
-                    <!-- Salons Configurés -->
+                    <!-- ==================== SALONS CONFIGURÉS ==================== -->
                     <div class="glass rounded-xl p-8">
                         <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
                             <i class="fa-solid fa-hashtag text-indigo-400"></i> Salons Configurés
@@ -116,7 +171,7 @@
                         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">${channelsHTML}</div>
                     </div>
 
-                    <!-- Rôles -->
+                    <!-- ==================== RÔLES ==================== -->
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div class="glass rounded-xl p-8">
                             <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
@@ -126,36 +181,82 @@
                         </div>
                         <div class="glass rounded-xl p-8">
                             <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
-                                <i class="fa-solid fa-user-plus text-green-400"></i> Auto-Rôle
+                                <i class="fa-solid fa-user-plus text-green-400"></i> Rôles Spéciaux
                             </h2>
-                            <div class="bg-slate-800 rounded-xl p-5 flex items-center gap-3">
-                                <i class="fa-solid fa-id-badge text-gray-400 text-xl"></i>
-                                <div>
-                                    <p class="text-gray-400 text-xs">Rôle attribué automatiquement</p>
-                                    <p class="font-mono text-sm ${cfg.autoRole ? 'text-white' : 'text-gray-600'}">${cfg.autoRole || 'Non configuré'}</p>
+                            <div class="space-y-3">
+                                <div class="bg-slate-800 rounded-xl p-5 flex items-center gap-3">
+                                    <i class="fa-solid fa-id-badge text-gray-400 text-xl w-6 text-center"></i>
+                                    <div class="flex-1 min-w-0">
+                                        <p class="text-gray-400 text-xs">Auto-Rôle (nouveaux membres)</p>
+                                        <p class="font-mono text-sm truncate ${cfg.autoRole ? 'text-white' : 'text-gray-600'}">${cfg.autoRole || 'Non configuré'}</p>
+                                    </div>
+                                    ${cfg.autoRole ? '<i class="fa-solid fa-check text-green-400 shrink-0"></i>' : '<i class="fa-solid fa-xmark text-gray-600 shrink-0"></i>'}
                                 </div>
-                                ${cfg.autoRole ? '<i class="fa-solid fa-check text-green-400 ml-auto"></i>' : ''}
-                            </div>
-                            <div class="mt-4 bg-slate-800 rounded-xl p-5 flex items-center gap-3">
-                                <i class="fa-solid fa-shield-halved text-gray-400 text-xl"></i>
-                                <div>
-                                    <p class="text-gray-400 text-xs">Rôle Staff (Tickets)</p>
-                                    <p class="font-mono text-sm ${cfg.staffRole ? 'text-white' : 'text-gray-600'}">${cfg.staffRole || 'Non configuré'}</p>
+                                <div class="bg-slate-800 rounded-xl p-5 flex items-center gap-3">
+                                    <i class="fa-solid fa-shield-halved text-gray-400 text-xl w-6 text-center"></i>
+                                    <div class="flex-1 min-w-0">
+                                        <p class="text-gray-400 text-xs">Rôle Staff (Tickets)</p>
+                                        <p class="font-mono text-sm truncate ${cfg.staffRole ? 'text-white' : 'text-gray-600'}">${cfg.staffRole || 'Non configuré'}</p>
+                                    </div>
+                                    ${cfg.staffRole ? '<i class="fa-solid fa-check text-green-400 shrink-0"></i>' : '<i class="fa-solid fa-xmark text-gray-600 shrink-0"></i>'}
                                 </div>
-                                ${cfg.staffRole ? '<i class="fa-solid fa-check text-green-400 ml-auto"></i>' : ''}
                             </div>
                         </div>
                     </div>
 
+                    <!-- ==================== FONCTIONNALITÉS ==================== -->
+                    <div class="glass rounded-xl p-8">
+                        <div class="flex items-center justify-between mb-6">
+                            <h2 class="text-2xl font-bold flex items-center gap-2">
+                                <i class="fa-solid fa-bolt text-yellow-400"></i> Fonctionnalités
+                            </h2>
+                            <a href="/features/" class="text-sm text-purple-400 hover:text-purple-300 transition flex items-center gap-1">
+                                Gérer <i class="fa-solid fa-arrow-right text-xs"></i>
+                            </a>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2">${featuresHTML}</div>
+                    </div>
+
+                    <!-- ==================== AUTOMOD RÉSUMÉ ==================== -->
+                    <div class="glass rounded-xl p-8">
+                        <div class="flex items-center justify-between mb-6">
+                            <h2 class="text-2xl font-bold flex items-center gap-2">
+                                <i class="fa-solid fa-shield-halved text-red-400"></i> AutoMod
+                                <span class="text-sm px-2 py-0.5 rounded-full font-normal ${automod.enabled ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}">
+                                    ${automod.enabled ? '✅ Activé' : '❌ Désactivé'}
+                                </span>
+                            </h2>
+                            <a href="/automod/" class="text-sm text-purple-400 hover:text-purple-300 transition flex items-center gap-1">
+                                Configurer <i class="fa-solid fa-arrow-right text-xs"></i>
+                            </a>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2">${automodHTML}</div>
+                    </div>
+
+                    <!-- ==================== INFO ==================== -->
                     <div class="glass rounded-xl p-6 text-center">
                         <p class="text-gray-400 text-sm">
                             <i class="fa-solid fa-info-circle mr-1"></i>
-                            La modification de ces paramètres se fait via les commandes slash Discord (<code class="bg-slate-700 px-2 py-0.5 rounded text-purple-300">/setxp</code>, <code class="bg-slate-700 px-2 py-0.5 rounded text-purple-300">/setchannel</code>, etc.)
+                            La modification se fait via les commandes slash Discord
+                            (<code class="bg-slate-700 px-2 py-0.5 rounded text-purple-300">/setxp</code>,
+                            <code class="bg-slate-700 px-2 py-0.5 rounded text-purple-300">/setchannel</code>, etc.)
+                            ou directement depuis les pages
+                            <a href="/features/" class="text-purple-400 hover:underline">Features</a> et
+                            <a href="/automod/" class="text-purple-400 hover:underline">AutoMod</a>.
                         </p>
                     </div>`;
 
             } catch (e) {
-                document.getElementById('configContent').innerHTML = '<p class="text-red-400 text-center py-12">Erreur lors du chargement de la configuration.</p>';
+                console.error('Erreur config:', e);
+                document.getElementById('configContent').innerHTML = `
+                    <div class="glass rounded-xl p-12 text-center">
+                        <i class="fa-solid fa-triangle-exclamation text-red-400 text-4xl mb-4"></i>
+                        <p class="text-red-400 text-lg">Erreur lors du chargement de la configuration.</p>
+                        <p class="text-gray-500 text-sm mt-2">Vérifiez que le bot est bien connecté et réessayez.</p>
+                        <button onclick="location.reload()" class="mt-4 bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-lg transition text-sm">
+                            <i class="fa-solid fa-arrows-rotate mr-1"></i> Réessayer
+                        </button>
+                    </div>`;
             }
         })();
     </script>

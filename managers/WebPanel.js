@@ -12,7 +12,7 @@ function startWebServer(client) {
     app.use(bodyParser.json());
     app.use(bodyParser.urlencoded({ extended: true }));
     
-    // Servir les assets CSS/JS et les pages HTML
+    // Servir les assets CSS/JS et les pages HTML statiques
     app.use(express.static(path.join(__dirname, '..', 'public')));
 
     const ADMIN_PASSWORD = config.panelPassword || "admin123";
@@ -28,7 +28,7 @@ function startWebServer(client) {
     const requireAuth = (req, res, next) => {
         const token = req.query.token;
         if (token === ADMIN_PASSWORD) return next();
-        return res.redirect('/login/');
+        return res.redirect('/login/'); // ✅ Redirection vers /login/
     };
 
     // --- API ROUTES ---
@@ -54,56 +54,86 @@ function startWebServer(client) {
         res.json({ success: true, config: Database.load() });
     });
 
- // === GET Automod Config ===
-app.get('/api/automod', authApi, (req, res) => {
-    res.json({ success: true, automod: Database.getAutomod() });
-});
+    // === AUTOMOD API ===
+    app.get('/api/automod', authApi, (req, res) => {
+        res.json({ success: true, automod: Database.getAutomod() });
+    });
 
-// === POST Toggle Global ===
-app.post('/api/automod/toggle', authApi, (req, res) => {
-    const { enabled } = req.body;
-    Database.setAutomod('enabled', !!enabled);
-    res.json({ success: true, enabled: !!enabled });
-});
+    app.post('/api/automod/toggle', authApi, (req, res) => {
+        const { enabled } = req.body;
+        Database.setAutomod('enabled', !!enabled);
+        res.json({ success: true, enabled: !!enabled });
+    });
 
-// === POST Update Filter ===
-app.post('/api/automod/filter', authApi, (req, res) => {
-    const { filter, settings } = req.body;
-    if (!filter || !settings) return res.status(400).json({ success: false, error: 'Paramètres manquants' });
+    app.post('/api/automod/filter', authApi, (req, res) => {
+        const { filter, settings } = req.body;
+        if (!filter || !settings) return res.status(400).json({ success: false, error: 'Paramètres manquants' });
 
-    const current = Database.getAutomod();
-    if (!current[filter]) return res.status(400).json({ success: false, error: 'Filtre inconnu' });
+        const current = Database.getAutomod();
+        if (!current[filter]) return res.status(400).json({ success: false, error: 'Filtre inconnu' });
 
-    // Merge sécurisé
-    for (const [key, value] of Object.entries(settings)) {
-        if (key in current[filter]) {
-            Database.setAutomod(`${filter}.${key}`, value);
+        for (const [key, value] of Object.entries(settings)) {
+            if (key in current[filter]) {
+                Database.setAutomod(`${filter}.${key}`, value);
+            }
         }
-    }
 
-    console.log(`[PANEL] AutoMod filter "${filter}" updated`);
-    res.json({ success: true, filter, settings });
-});
+        console.log(`[PANEL] AutoMod filter "${filter}" updated`);
+        res.json({ success: true, filter, settings });
+    });
 
-// === POST Update Exemptions ===
-app.post('/api/automod/exemptions', authApi, (req, res) => {
-    const { exemptRoles, exemptChannels } = req.body;
-    if (exemptRoles) Database.setAutomod('exemptRoles', exemptRoles);
-    if (exemptChannels) Database.setAutomod('exemptChannels', exemptChannels);
-    res.json({ success: true });
-});
+    app.post('/api/automod/exemptions', authApi, (req, res) => {
+        const { exemptRoles, exemptChannels } = req.body;
+        if (exemptRoles) Database.setAutomod('exemptRoles', exemptRoles);
+        if (exemptChannels) Database.setAutomod('exemptChannels', exemptChannels);
+        res.json({ success: true });
+    });
 
     // --- PAGE ROUTES ---
-    app.get('/', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'index.html')));
-    app.get('/features/', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', '/features/index.html')));
-    app.get('/status/', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', '/status/index.html')));
-    app.get('/config/', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', '/config/index.html')));
-    app.get('/about/', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', '/about/index.html')));
-    app.get('/automod/', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', '/automod/index.html')));
-
+    // ✅ Route login sans authentification
+    app.get('/login', (req, res) => 
+        res.sendFile(path.join(__dirname, '..', 'public', 'login', 'index.html'))
+    );
+    app.get('/login/', (req, res) => 
+        res.sendFile(path.join(__dirname, '..', 'public', 'login', 'index.html'))
+    );
+    
+    // ✅ Routes protégées
+    app.get('/', requireAuth, (req, res) => 
+        res.sendFile(path.join(__dirname, '..', 'public', 'index.html'))
+    );
+    
+    app.get('/features', requireAuth, (req, res) => 
+        res.sendFile(path.join(__dirname, '..', 'public', 'features', 'index.html'))
+    );
+    app.get('/features/', requireAuth, (req, res) => res.redirect('/features'));
+    
+    app.get('/status', requireAuth, (req, res) => 
+        res.sendFile(path.join(__dirname, '..', 'public', 'status', 'index.html'))
+    );
+    app.get('/status/', requireAuth, (req, res) => res.redirect('/status'));
+    
+    app.get('/config', requireAuth, (req, res) => 
+        res.sendFile(path.join(__dirname, '..', 'public', 'config', 'index.html'))
+    );
+    app.get('/config/', requireAuth, (req, res) => res.redirect('/config'));
+    
+    app.get('/about', requireAuth, (req, res) => 
+        res.sendFile(path.join(__dirname, '..', 'public', 'about', 'index.html'))
+    );
+    app.get('/about/', requireAuth, (req, res) => res.redirect('/about'));
+    
+    app.get('/automod', requireAuth, (req, res) => 
+        res.sendFile(path.join(__dirname, '..', 'public', 'automod', 'index.html'))
+    );
+    app.get('/automod/', requireAuth, (req, res) => res.redirect('/automod'));
 
     app.listen(WEB_PORT, '0.0.0.0', () => {
-        console.log(`🌐 Panel web démarré sur https://orinhebergebot.deepstone.fr/`);
+        console.log(`🌐 Panel web démarré sur http://0.0.0.0:${WEB_PORT}`);
+        console.log(`   → Login: http://localhost:${WEB_PORT}/login/`);
+        console.log(`   → Login: https://hebergebot.deepstone.fr/login/`);
+        console.log(`   → Dashboard: http://localhost:${WEB_PORT}/`);
+        console.log(`   → Dashboard: https://hebergebot.deepstone.fr/`);
     });
 }
 
