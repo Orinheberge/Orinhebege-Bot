@@ -112,13 +112,13 @@ const Panel = {
 
 // Vérification d'authentification globale
 document.addEventListener('DOMContentLoaded', () => {
-    const publicPages = ['/login.html'];
+    const publicPages = ['/login/'];
     const currentPath = window.location.pathname;
 
     if (!publicPages.includes(currentPath)) {
         const token = localStorage.getItem('panelToken');
         if (!token) {
-            window.location.href = '/login.html';
+            window.location.href = '/login/';
             return;
         }
     }
