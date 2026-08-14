@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connexion - Orinstone Panel</title>
+    <link rel="shortcut icon" href="https://heberge.deepstone.fr/favicon.ico" type="image/x-icon">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/assets/css/style.css">
+</head>
+<body class="text-white flex items-center justify-center">
+    <div class="max-w-md w-full mx-4 fade-in">
+        <div class="glass rounded-2xl p-8 card-hover">
+            <div class="text-center mb-8">
+                <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-purple-500/20 mb-4">
+                    <i class="fa-solid fa-cube text-purple-400 text-3xl"></i>
+                </div>
+                <h1 class="text-3xl font-bold">Orinstone Panel</h1>
+                <p class="text-gray-400 mt-2">Accédez au panel de gestion du bot</p>
+            </div>
+
+            <form id="loginForm" class="space-y-5">
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">
+                        <i class="fa-solid fa-lock mr-1"></i> Mot de passe administrateur
+                    </label>
+                    <input type="password" id="password" required autofocus
+                        class="w-full px-4 py-3 bg-slate-800/80 border border-slate-600 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent focus:outline-none transition placeholder-gray-500"
+                        placeholder="Entrez le mot de passe...">
+                </div>
+
+                <button type="submit" id="submitBtn"
+                    class="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 py-3 rounded-xl font-semibold transition flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-right-to-bracket"></i> Se connecter
+                </button>
+
+                <div id="error" class="hidden bg-red-500/20 border border-red-500/50 text-red-300 px-4 py-3 rounded-xl text-sm text-center"></div>
+            </form>
+        </div>
+
+        <p class="text-center text-gray-500 text-sm mt-6">&copy; 2026 Orinstone Network</p>
+    </div>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const password = document.getElementById('password').value;
+            const btn = document.getElementById('submitBtn');
+            const errorDiv = document.getElementById('error');
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Connexion...';
+            errorDiv.classList.add('hidden');
+
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    localStorage.setItem('panelToken', data.token);
+                    window.location.href = '/?token=' + encodeURIComponent(data.token);
+                } else {
+                    errorDiv.textContent = data.error || 'Erreur inconnue';
+                    errorDiv.classList.remove('hidden');
+                }
+            } catch (err) {
+                errorDiv.textContent = 'Impossible de contacter le serveur.';
+                errorDiv.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> Se connecter';
+            }
+        });
+    </script>
+</body>
+</html>

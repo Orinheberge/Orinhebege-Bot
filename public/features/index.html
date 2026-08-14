@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fonctionnalités - Orinstone Panel</title>
+    <link rel="shortcut icon" href="https://heberge.deepstone.fr/favicon.ico" type="image/x-icon">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/assets/css/style.css">
+</head>
+<body class="text-white">
+    <div id="notification" class="hidden fixed top-20 right-6 z-50 px-6 py-3 rounded-lg shadow-lg text-white"></div>
+
+    <nav class="glass sticky top-0 z-40 px-6 py-4 flex justify-between items-center">
+        <div class="flex items-center gap-3">
+            <i class="fa-solid fa-cube text-purple-400 text-2xl"></i>
+            <span class="font-bold text-xl hidden sm:inline">Orinstone Panel</span>
+        </div>
+        <div class="flex gap-4 items-center text-sm">
+            <a href="/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-house mr-1"></i> Accueil</a>
+            <a href="/features" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-sliders mr-1"></i> Features</a>
+            <a href="/status" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-signal mr-1"></i> Statuts</a>
+            <a href="/config" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-gear mr-1"></i> Config</a>
+            <button onclick="logout()" class="bg-red-500/80 hover:bg-red-600 px-4 py-2 rounded-lg transition text-xs font-medium"><i class="fa-solid fa-right-from-bracket"></i></button>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-6 py-8">
+        <div class="mb-8 fade-in">
+            <h1 class="text-4xl font-bold mb-2"><i class="fa-solid fa-sliders text-purple-400 mr-2"></i>Fonctionnalités</h1>
+            <p class="text-gray-400">Activez ou désactivez les différents modules du bot en temps réel</p>
+        </div>
+
+        <div id="featuresGrid" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="col-span-full text-center py-12 text-gray-400">
+                <i class="fa-solid fa-spinner fa-spin text-2xl mb-3"></i>
+                <p>Chargement des fonctionnalités...</p>
+            </div>
+        </div>
+    </div>
+
+    <footer class="glass mt-12 py-6 text-center text-gray-500 text-sm">
+        <p>&copy; 2026 Orinstone Network</p>
+    </footer>
+
+    <script src="/assets/js/script.js"></script>
+    <script>
+        const FEATURES_CONFIG = [
+            { key: 'xpMessages', name: 'XP Messages', icon: 'fa-message', desc: 'Attribution d\'XP lors de l\'envoi de messages', color: 'blue' },
+            { key: 'xpVoice', name: 'XP Vocal', icon: 'fa-microphone', desc: 'Attribution d\'XP toutes les minutes en vocal', color: 'green' },
+            { key: 'welcomeMessages', name: 'Messages de bienvenue', icon: 'fa-hand-wave', desc: 'Envoi d\'un message à l\'arrivée des nouveaux membres', color: 'emerald' },
+            { key: 'leaveMessages', name: 'Messages de départ', icon: 'fa-door-open', desc: 'Envoi d\'un message quand un membre quitte', color: 'orange' },
+            { key: 'logs', name: 'Logs du serveur', icon: 'fa-file-lines', desc: 'Enregistrement des événements dans le salon dédié', color: 'purple' },
+            { key: 'tickets', name: 'Système de tickets', icon: 'fa-ticket', desc: 'Création et gestion des tickets de support', color: 'indigo' },
+            { key: 'statusServices', name: 'Statut des services', icon: 'fa-signal', desc: 'Affichage du statut des services hébergés', color: 'cyan' },
+            { key: 'botStatusRotation', name: 'Rotation du statut', icon: 'fa-rotate', desc: 'Changement automatique du statut du bot', color: 'pink' },
+            { key: 'levelUpNotifications', name: 'Notifications Level Up', icon: 'fa-arrow-up', desc: 'Annonce quand un membre monte de niveau', color: 'yellow' },
+            { key: 'reactionReglement', name: 'Réaction Règlement', icon: 'fa-scroll', desc: 'Logs des réactions sur le message du règlement', color: 'amber' }
+        ];
+
+        (async () => {
+            try {
+                const data = await Panel.api('/api/status');
+                const features = data.features || {};
+                const grid = document.getElementById('featuresGrid');
+                grid.innerHTML = '';
+
+                FEATURES_CONFIG.forEach((f, i) => {
+                    const isEnabled = features[f.key] !== false;
+                    const delayClass = `fade-in-delay-${Math.min(i % 3 + 1, 3)}`;
+
+                    grid.innerHTML += `
+                        <div class="glass rounded-xl p-6 card-hover fade-in ${delayClass}">
+                            <div class="flex items-start justify-between">
+                                <div class="flex items-start gap-4 flex-1">
+                                    <div class="bg-${f.color}-500/20 p-3 rounded-lg shrink-0">
+                                        <i class="fa-solid ${f.icon} text-${f.color}-400 text-xl"></i>
+                                    </div>
+                                    <div class="flex-1">
+                                        <h3 class="font-bold text-lg">${f.name}</h3>
+                                        <p class="text-gray-400 text-sm mt-1">${f.desc}</p>
+                                        <span id="status-${f.key}" class="inline-block mt-2 px-2 py-1 text-xs rounded-full ${isEnabled ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}">
+                                            ${isEnabled ? '✓ Activé' : '✗ Désactivé'}
+                                        </span>
+                                    </div>
+                                </div>
+                                <label class="relative inline-flex items-center cursor-pointer shrink-0 ml-3">
+                                    <input type="checkbox" class="sr-only peer toggle-checkbox" data-feature="${f.key}" ${isEnabled ? 'checked' : ''}>
+                                    <div class="toggle-label relative w-14 h-7 bg-gray-600 rounded-full peer-checked:bg-green-500 transition">
+                                        <div class="toggle-dot absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition"></div>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>`;
+                });
+
+                // Bind toggles
+                document.querySelectorAll('.toggle-checkbox').forEach(toggle => {
+                    toggle.addEventListener('change', async (e) => {
+                        const feature = e.target.dataset.feature;
+                        const enabled = e.target.checked;
+                        const statusEl = document.getElementById(`status-${feature}`);
+
+                        try {
+                            const res = await Panel.api('/api/feature', {
+                                method: 'POST',
+                                body: JSON.stringify({ feature, enabled })
+                            });
+
+                            if (res.success) {
+                                Panel.notify(enabled ? `✅ ${feature} activé !` : `❌ ${feature} désactivé`, enabled ? 'success' : 'info');
+                                statusEl.textContent = enabled ? '✓ Activé' : '✗ Désactivé';
+                                statusEl.className = `inline-block mt-2 px-2 py-1 text-xs rounded-full ${enabled ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`;
+                            } else {
+                                e.target.checked = !enabled;
+                                Panel.notify(res.error || 'Erreur serveur', 'error');
+                            }
+                        } catch (err) {
+                            e.target.checked = !enabled;
+                            Panel.notify('Erreur de connexion', 'error');
+                        }
+                    });
+                });
+
+            } catch (e) {
+                document.getElementById('featuresGrid').innerHTML = '<p class="col-span-full text-red-400 text-center py-12">Erreur lors du chargement des fonctionnalités.</p>';
+            }
+        })();
+    </script>
+</body>
+</html>

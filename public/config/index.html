@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuration - Orinstone Panel</title>
+    <link rel="shortcut icon" href="https://heberge.deepstone.fr/favicon.ico" type="image/x-icon">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/assets/css/style.css">
+</head>
+<body class="text-white">
+    <div id="notification" class="hidden fixed top-20 right-6 z-50 px-6 py-3 rounded-lg shadow-lg text-white"></div>
+
+    <nav class="glass sticky top-0 z-40 px-6 py-4 flex justify-between items-center">
+        <div class="flex items-center gap-3">
+            <i class="fa-solid fa-cube text-purple-400 text-2xl"></i>
+            <span class="font-bold text-xl hidden sm:inline">Orinstone Panel</span>
+        </div>
+        <div class="flex gap-4 items-center text-sm">
+            <a href="/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-house mr-1"></i> Accueil</a>
+            <a href="/features" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-sliders mr-1"></i> Features</a>
+            <a href="/status" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-signal mr-1"></i> Statuts</a>
+            <a href="/config" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-gear mr-1"></i> Config</a>
+            <button onclick="logout()" class="bg-red-500/80 hover:bg-red-600 px-4 py-2 rounded-lg transition text-xs font-medium"><i class="fa-solid fa-right-from-bracket"></i></button>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-6 py-8">
+        <div class="mb-8 fade-in">
+            <h1 class="text-4xl font-bold mb-2"><i class="fa-solid fa-gear text-blue-400 mr-2"></i>Configuration</h1>
+            <p class="text-gray-400">Vue d'ensemble des paramètres actuels du bot</p>
+        </div>
+
+        <div id="configContent" class="space-y-6 fade-in fade-in-delay-1">
+            <div class="text-center py-12 text-gray-400">
+                <i class="fa-solid fa-spinner fa-spin text-2xl mb-3"></i>
+                <p>Chargement de la configuration...</p>
+            </div>
+        </div>
+    </div>
+
+    <footer class="glass mt-12 py-6 text-center text-gray-500 text-sm">
+        <p>&copy; 2026 Orinstone Network</p>
+    </footer>
+
+    <script src="/assets/js/script.js"></script>
+    <script>
+        (async () => {
+            try {
+                const data = await Panel.api('/api/config');
+                const cfg = data.config || {};
+                const container = document.getElementById('configContent');
+
+                const levelRoles = cfg.levelRoles || {};
+                const levelRolesHTML = Object.entries(levelRoles).length > 0
+                    ? Object.entries(levelRoles).map(([lvl, roleId]) =>
+                        `<div class="flex justify-between items-center bg-slate-800/50 rounded-lg px-4 py-2">
+                            <span class="text-purple-300 font-semibold">Niveau ${lvl}</span>
+                            <span class="font-mono text-xs text-gray-400">${roleId}</span>
+                        </div>`
+                      ).join('')
+                    : '<p class="text-gray-500 italic">Aucun rôle de niveau configuré</p>';
+
+                const channels = [
+                    { label: 'Tickets', value: cfg.ticketCategory, icon: 'fa-ticket' },
+                    { label: 'Transcripts', value: cfg.transcriptChannel, icon: 'fa-file-lines' },
+                    { label: 'Bienvenue', value: cfg.welcomeChannel, icon: 'fa-hand-wave' },
+                    { label: 'Logs', value: cfg.logsChannel, icon: 'fa-file-lines' },
+                    { label: 'Statuts', value: cfg.statusChannel, icon: 'fa-signal' },
+                    { label: 'Level Up', value: cfg.levelupChannel, icon: 'fa-arrow-up' }
+                ];
+
+                const channelsHTML = channels.map(c => `
+                    <div class="bg-slate-800 rounded-lg p-4 flex items-center gap-3">
+                        <i class="fa-solid ${c.icon} text-gray-400"></i>
+                        <div class="flex-1">
+                            <p class="text-gray-400 text-xs">${c.label}</p>
+                            <p class="font-mono text-sm ${c.value ? 'text-white' : 'text-gray-600'}">${c.value || 'Non configuré'}</p>
+                        </div>
+                        ${c.value ? '<i class="fa-solid fa-check text-green-400 text-xs"></i>' : ''}
+                    </div>
+                `).join('');
+
+                container.innerHTML = `
+                    <!-- XP & Niveaux -->
+                    <div class="glass rounded-xl p-8">
+                        <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+                            <i class="fa-solid fa-star text-yellow-400"></i> XP & Niveaux
+                        </h2>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div class="bg-slate-800 rounded-xl p-5 text-center card-hover">
+                                <p class="text-gray-400 text-sm mb-1">XP Message</p>
+                                <p class="text-3xl font-bold text-blue-400">${cfg.xpMessage || 15}</p>
+                            </div>
+                            <div class="bg-slate-800 rounded-xl p-5 text-center card-hover">
+                                <p class="text-gray-400 text-sm mb-1">XP Vocal</p>
+                                <p class="text-3xl font-bold text-green-400">${cfg.xpVoice || 15}<span class="text-base text-gray-500">/min</span></p>
+                            </div>
+                            <div class="bg-slate-800 rounded-xl p-5 text-center card-hover">
+                                <p class="text-gray-400 text-sm mb-1">Cooldown</p>
+                                <p class="text-3xl font-bold text-orange-400">${cfg.xpMessageCooldown || 60}<span class="text-base text-gray-500">s</span></p>
+                            </div>
+                            <div class="bg-slate-800 rounded-xl p-5 text-center card-hover">
+                                <p class="text-gray-400 text-sm mb-1">Niveau Max</p>
+                                <p class="text-3xl font-bold text-purple-400">${cfg.maxLevel || 5000}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Salons Configurés -->
+                    <div class="glass rounded-xl p-8">
+                        <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+                            <i class="fa-solid fa-hashtag text-indigo-400"></i> Salons Configurés
+                        </h2>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">${channelsHTML}</div>
+                    </div>
+
+                    <!-- Rôles -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="glass rounded-xl p-8">
+                            <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+                                <i class="fa-solid fa-trophy text-yellow-400"></i> Rôles de Niveau
+                            </h2>
+                            <div class="space-y-2 max-h-64 overflow-y-auto pr-2">${levelRolesHTML}</div>
+                        </div>
+                        <div class="glass rounded-xl p-8">
+                            <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+                                <i class="fa-solid fa-user-plus text-green-400"></i> Auto-Rôle
+                            </h2>
+                            <div class="bg-slate-800 rounded-xl p-5 flex items-center gap-3">
+                                <i class="fa-solid fa-id-badge text-gray-400 text-xl"></i>
+                                <div>
+                                    <p class="text-gray-400 text-xs">Rôle attribué automatiquement</p>
+                                    <p class="font-mono text-sm ${cfg.autoRole ? 'text-white' : 'text-gray-600'}">${cfg.autoRole || 'Non configuré'}</p>
+                                </div>
+                                ${cfg.autoRole ? '<i class="fa-solid fa-check text-green-400 ml-auto"></i>' : ''}
+                            </div>
+                            <div class="mt-4 bg-slate-800 rounded-xl p-5 flex items-center gap-3">
+                                <i class="fa-solid fa-shield-halved text-gray-400 text-xl"></i>
+                                <div>
+                                    <p class="text-gray-400 text-xs">Rôle Staff (Tickets)</p>
+                                    <p class="font-mono text-sm ${cfg.staffRole ? 'text-white' : 'text-gray-600'}">${cfg.staffRole || 'Non configuré'}</p>
+                                </div>
+                                ${cfg.staffRole ? '<i class="fa-solid fa-check text-green-400 ml-auto"></i>' : ''}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="glass rounded-xl p-6 text-center">
+                        <p class="text-gray-400 text-sm">
+                            <i class="fa-solid fa-info-circle mr-1"></i>
+                            La modification de ces paramètres se fait via les commandes slash Discord (<code class="bg-slate-700 px-2 py-0.5 rounded text-purple-300">/setxp</code>, <code class="bg-slate-700 px-2 py-0.5 rounded text-purple-300">/setchannel</code>, etc.)
+                        </p>
+                    </div>`;
+
+            } catch (e) {
+                document.getElementById('configContent').innerHTML = '<p class="text-red-400 text-center py-12">Erreur lors du chargement de la configuration.</p>';
+            }
+        })();
+    </script>
+</body>
+</html>

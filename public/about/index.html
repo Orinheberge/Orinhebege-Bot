@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>À propos - Orinstone Panel</title>
+    <link rel="shortcut icon" href="https://heberge.deepstone.fr/favicon.ico" type="image/x-icon">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/assets/css/style.css">
+</head>
+<body class="text-white">
+    <nav class="glass sticky top-0 z-40 px-6 py-4 flex justify-between items-center">
+        <div class="flex items-center gap-3">
+            <i class="fa-solid fa-cube text-purple-400 text-2xl"></i>
+            <span class="font-bold text-xl hidden sm:inline">Orinstone Panel</span>
+        </div>
+        <div class="flex gap-4 items-center text-sm">
+            <a href="/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-house mr-1"></i> Accueil</a>
+            <a href="/features" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-sliders mr-1"></i> Features</a>
+            <a href="/status" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-signal mr-1"></i> Statuts</a>
+            <a href="/config" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-gear mr-1"></i> Config</a>
+            <button onclick="logout()" class="bg-red-500/80 hover:bg-red-600 px-4 py-2 rounded-lg transition text-xs font-medium"><i class="fa-solid fa-right-from-bracket"></i></button>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-6 py-8">
+        <div class="max-w-4xl mx-auto">
+            <div class="mb-10 text-center fade-in">
+                <div class="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-600 mb-6 shadow-lg shadow-purple-500/30">
+                    <i class="fa-solid fa-cube text-white text-4xl"></i>
+                </div>
+                <h1 class="text-5xl font-bold mb-3">Orinstone Panel</h1>
+                <p class="text-gray-400 text-lg">Panel de gestion du bot Discord Orinstone Network</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                <div class="glass rounded-xl p-8 card-hover fade-in fade-in-delay-1">
+                    <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+                        <i class="fa-solid fa-info-circle text-blue-400"></i> Informations Système
+                    </h2>
+                    <div class="space-y-4">
+                        <div class="flex justify-between items-center border-b border-white/5 pb-3">
+                            <span class="text-gray-400">Version</span>
+                            <span class="font-mono bg-slate-800 px-3 py-1 rounded-lg text-purple-300">2.0.0</span>
+                        </div>
+                        <div class="flex justify-between items-center border-b border-white/5 pb-3">
+                            <span class="text-gray-400">Node.js</span>
+                            <span class="font-mono bg-slate-800 px-3 py-1 rounded-lg text-green-300" id="nodeVersion">--</span>
+                        </div>
+                        <div class="flex justify-between items-center border-b border-white/5 pb-3">
+                            <span class="text-gray-400">Port Panel</span>
+                            <span class="font-mono bg-slate-800 px-3 py-1 rounded-lg text-blue-300">26162</span>
+                        </div>
+                        <div class="flex justify-between items-center border-b border-white/5 pb-3">
+                            <span class="text-gray-400">Architecture</span>
+                            <span class="font-mono bg-slate-800 px-3 py-1 rounded-lg text-orange-300">Modulaire</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-400">Base de données</span>
+                            <span class="font-mono bg-slate-800 px-3 py-1 rounded-lg text-yellow-300">JSON File</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glass rounded-xl p-8 card-hover fade-in fade-in-delay-2">
+                    <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+                        <i class="fa-solid fa-layer-group text-purple-400"></i> Modules
+                    </h2>
+                    <div class="space-y-3">
+                        <div class="flex items-center gap-3 bg-slate-800/50 rounded-lg px-4 py-3">
+                            <i class="fa-solid fa-database text-blue-400 w-6 text-center"></i>
+                            <div>
+                                <p class="font-semibold text-sm">Database Manager</p>
+                                <p class="text-gray-500 text-xs">Configuration & Features</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 bg-slate-800/50 rounded-lg px-4 py-3">
+                            <i class="fa-solid fa-ranking-star text-yellow-400 w-6 text-center"></i>
+                            <div>
+                                <p class="font-semibold text-sm">Level System</p>
+                                <p class="text-gray-500 text-xs">XP, Leaderboard, Rôles</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 bg-slate-800/50 rounded-lg px-4 py-3">
+                            <i class="fa-solid fa-signal text-green-400 w-6 text-center"></i>
+                            <div>
+                                <p class="font-semibold text-sm">Status Checker</p>
+                                <p class="text-gray-500 text-xs">HTTP/TCP Monitoring</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 bg-slate-800/50 rounded-lg px-4 py-3">
+                            <i class="fa-solid fa-globe text-indigo-400 w-6 text-center"></i>
+                            <div>
+                                <p class="font-semibold text-sm">Web Panel</p>
+                                <p class="text-gray-500 text-xs">Express + Static Frontend</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 bg-slate-800/50 rounded-lg px-4 py-3">
+                            <i class="fa-solid fa-scroll text-amber-400 w-6 text-center"></i>
+                            <div>
+                                <p class="font-semibold text-sm">Utils</p>
+                                <p class="text-gray-500 text-xs">Logger & Règlement</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass rounded-xl p-8 text-center fade-in fade-in-delay-3">
+                <h2 class="text-xl font-bold mb-4">Liens Utiles</h2>
+                <div class="flex flex-wrap justify-center gap-4">
+                    <a href="https://heberge.orinstone.deepstone.fr" target="_blank" class="bg-slate-800 hover:bg-slate-700 px-5 py-2.5 rounded-lg transition text-sm flex items-center gap-2">
+                        <i class="fa-solid fa-globe text-purple-400"></i> Site Web
+                    </a>
+                    <a href="https://panel.orinstone.deepstone.fr" target="_blank" class="bg-slate-800 hover:bg-slate-700 px-5 py-2.5 rounded-lg transition text-sm flex items-center gap-2">
+                        <i class="fa-solid fa-server text-blue-400"></i> Panel Hébergement
+                    </a>
+                    <a href="https://discord.gg/orinstone" target="_blank" class="bg-slate-800 hover:bg-slate-700 px-5 py-2.5 rounded-lg transition text-sm flex items-center gap-2">
+                        <i class="fa-brands fa-discord text-indigo-400"></i> Discord
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="glass mt-12 py-6 text-center text-gray-500 text-sm">
+        <p>&copy; 2026 Orinstone Network - Tous droits réservés</p>
+    </footer>
+
+    <script src="/assets/js/script.js"></script>
+    <script>
+        // Récupérer la version Node.js via l'API config
+        (async () => {
+            try {
+                const data = await Panel.api('/api/config');
+                // Le serveur pourrait exposer nodeVersion dans une future mise à jour
+                // Pour l'instant on affiche la version côté client
+                document.getElementById('nodeVersion').textContent = 'v22.x';
+            } catch (e) {
+                document.getElementById('nodeVersion').textContent = 'N/A';
+            }
+        })();
+    </script>
+</body>
+</html>

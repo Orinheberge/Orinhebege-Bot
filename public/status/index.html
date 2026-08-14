@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Statuts - Orinstone Panel</title>
+    <link rel="shortcut icon" href="https://heberge.deepstone.fr/favicon.ico" type="image/x-icon">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/assets/css/style.css">
+</head>
+<body class="text-white">
+    <div id="notification" class="hidden fixed top-20 right-6 z-50 px-6 py-3 rounded-lg shadow-lg text-white"></div>
+
+    <nav class="glass sticky top-0 z-40 px-6 py-4 flex justify-between items-center">
+        <div class="flex items-center gap-3">
+            <i class="fa-solid fa-cube text-purple-400 text-2xl"></i>
+            <span class="font-bold text-xl hidden sm:inline">Orinstone Panel</span>
+        </div>
+        <div class="flex gap-4 items-center text-sm">
+            <a href="/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-house mr-1"></i> Accueil</a>
+            <a href="/features" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-sliders mr-1"></i> Features</a>
+            <a href="/status" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-signal mr-1"></i> Statuts</a>
+            <a href="/config" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-gear mr-1"></i> Config</a>
+            <button onclick="logout()" class="bg-red-500/80 hover:bg-red-600 px-4 py-2 rounded-lg transition text-xs font-medium"><i class="fa-solid fa-right-from-bracket"></i></button>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-6 py-8">
+        <div class="mb-8 flex justify-between items-end fade-in">
+            <div>
+                <h1 class="text-4xl font-bold mb-2"><i class="fa-solid fa-signal text-green-400 mr-2"></i>Statut des Services</h1>
+                <p class="text-gray-400">État en temps réel de vos services hébergés</p>
+            </div>
+            <button onclick="refreshStatus()" id="refreshBtn" class="glass-light hover:bg-white/10 px-4 py-2 rounded-lg transition text-sm">
+                <i class="fa-solid fa-arrows-rotate mr-1"></i> Rafraîchir
+            </button>
+        </div>
+
+        <div id="statusGrid" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="col-span-full text-center py-12 text-gray-400">
+                <i class="fa-solid fa-spinner fa-spin text-2xl mb-3"></i>
+                <p>Vérification des services en cours...</p>
+            </div>
+        </div>
+
+        <p class="text-gray-500 text-xs text-center mt-8" id="lastCheck"></p>
+    </div>
+
+    <footer class="glass mt-12 py-6 text-center text-gray-500 text-sm">
+        <p>&copy; 2026 Orinstone Network</p>
+    </footer>
+
+    <script src="/assets/js/script.js"></script>
+    <script>
+        async function refreshStatus() {
+            const btn = document.getElementById('refreshBtn');
+            const grid = document.getElementById('statusGrid');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Vérification...';
+
+            try {
+                const data = await Panel.api('/api/status');
+                renderServices(data.services || []);
+                Panel.notify('Statuts mis à jour !', 'success');
+            } catch (e) {
+                grid.innerHTML = '<p class="col-span-full text-red-400 text-center py-12">Erreur lors de la vérification.</p>';
+                Panel.notify('Erreur de connexion', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-arrows-rotate mr-1"></i> Rafraîchir';
+            }
+        }
+
+        function renderServices(services) {
+            const grid = document.getElementById('statusGrid');
+            grid.innerHTML = '';
+
+            services.forEach((s, i) => {
+                const isOnline = s.online;
+                const color = isOnline ? 'green' : 'red';
+                const icon = isOnline ? 'fa-circle-check' : 'fa-circle-xmark';
+                const statusText = isOnline ? 'En ligne' : 'Hors ligne';
+                const delayClass = `fade-in-delay-${Math.min(i % 3 + 1, 3)}`;
+
+                let details = `<p><span class="text-gray-400">Statut :</span> <span class="text-${color}-400 font-semibold">${statusText}</span></p>`;
+                if (s.responseTime) details += `<p><span class="text-gray-400">Latence :</span> <span class="font-mono">${s.responseTime}ms</span></p>`;
+                if (s.statusCode) details += `<p><span class="text-gray-400">HTTP :</span> <span class="font-mono">${s.statusCode}</span></p>`;
+                if (s.url) details += `<p><span class="text-gray-400">URL :</span> <a href="${s.url}" target="_blank" class="text-purple-400 hover:underline break-all">${s.url}</a></p>`;
+                if (s.host) details += `<p><span class="text-gray-400">Hôte :</span> <span class="font-mono">${s.host}:${s.port || ''}</span></p>`;
+
+                grid.innerHTML += `
+                    <div class="glass rounded-xl p-6 card-hover fade-in ${delayClass}">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="font-bold text-lg">${s.name}</h3>
+                            <div class="flex items-center gap-2">
+                                <span class="status-dot ${isOnline ? 'online' : 'offline'} ${isOnline ? 'status-pulse' : ''}"></span>
+                                <i class="fa-solid ${icon} text-${color}-400 text-xl"></i>
+                            </div>
+                        </div>
+                        <div class="space-y-1 text-sm glass-light rounded-lg p-3">${details}</div>
+                    </div>`;
+            });
+
+            document.getElementById('lastCheck').textContent = `Dernière vérification : ${new Date().toLocaleString('fr-FR')}`;
+        }
+
+        // Chargement initial
+        refreshStatus();
+        // Auto-refresh toutes les 5 minutes
+        setInterval(refreshStatus, 5 * 60 * 1000);
+    </script>
+</body>
+</html>
