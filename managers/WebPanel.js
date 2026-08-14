@@ -96,6 +96,9 @@ function startWebServer(client) {
         res.json({ success: true, config: Database.load() });
     });
 
+    
+    app.get('/console/', requireAuth, (req, res) => res.redirect('/console'));
+
     // === AUTOMOD API ===
     app.get('/api/automod', authApi, (req, res) => {
         res.json({ success: true, automod: Database.getAutomod() });
@@ -141,6 +144,10 @@ function startWebServer(client) {
     );
     app.get('/login/', (req, res) => 
         res.sendFile(path.join(__dirname, '..', 'public', 'login', 'index.html'))
+    );
+
+    app.get('/console', requireAuth, (req, res) => 
+    res.sendFile(path.join(__dirname, '..', 'public', 'console', 'index.html'))
     );
     
     // Pages protégées

@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Console - Orinstone Panel</title>
+    <link rel="shortcut icon" href="https://heberge.deepstone.fr/favicon.ico" type="image/x-icon">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <style>
+        /* Terminal styles */
+        #terminal {
+            font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            scrollbar-width: thin;
+            scrollbar-color: #475569 #1e293b;
+        }
+        #terminal::-webkit-scrollbar { width: 6px; }
+        #terminal::-webkit-scrollbar-track { background: #1e293b; }
+        #terminal::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+
+        .line-input { color: #a78bfa; }
+        .line-output { color: #e2e8f0; }
+        .line-error { color: #f87171; }
+        .line-system { color: #6ee7b7; }
+        .line-welcome { color: #fbbf24; }
+
+        .prompt { color: #10b981; font-weight: bold; }
+        .cursor-blink {
+            animation: blink 1s step-end infinite;
+        }
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+
+        #cmdInput {
+            caret-color: #10b981;
+        }
+    </style>
+</head>
+<body class="text-white">
+
+    <div id="notification" class="hidden fixed top-20 right-6 z-50 px-6 py-3 rounded-lg shadow-lg text-white"></div>
+
+    <!-- Navbar -->
+    <nav class="glass sticky top-0 z-40 px-6 py-4 flex justify-between items-center">
+        <div class="flex items-center gap-3">
+            <i class="fa-solid fa-cube text-purple-400 text-2xl"></i>
+            <span class="font-bold text-xl hidden sm:inline">Orinstone Panel</span>
+        </div>
+        <div class="flex gap-4 items-center text-sm">
+            <a href="/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-house mr-1"></i> Accueil</a>
+            <a href="/features/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-sliders mr-1"></i> Features</a>
+            <a href="/automod/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-shield-halved mr-1"></i> AutoMod</a>
+            <a href="/console/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-terminal mr-1"></i> Console</a>
+            <a href="/status/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-signal mr-1"></i> Statuts</a>
+            <button onclick="logout()" class="bg-red-500/80 hover:bg-red-600 px-4 py-2 rounded-lg transition text-xs font-medium"><i class="fa-solid fa-right-from-bracket"></i></button>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-6 py-6">
+
+        <!-- Header + Status -->
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 fade-in gap-3">
+            <div>
+                <h1 class="text-3xl font-bold mb-1"><i class="fa-solid fa-terminal text-green-400 mr-2"></i>Console</h1>
+                <p class="text-gray-400 text-sm">Exécutez des commandes sur le bot en temps réel</p>
+            </div>
+            <div class="flex items-center gap-3">
+                <div class="flex items-center gap-2 glass-light rounded-lg px-3 py-1.5 text-xs">
+                    <span id="wsStatus" class="status-dot offline"></span>
+                    <span id="wsStatusText" class="text-gray-400">Déconnecté</span>
+                </div>
+                <button onclick="clearTerminal()" class="glass-light hover:bg-white/10 px-3 py-1.5 rounded-lg transition text-xs">
+                    <i class="fa-solid fa-broom mr-1"></i> Effacer
+                </button>
+                <button onclick="disconnectWS()" class="glass-light hover:bg-red-500/20 px-3 py-1.5 rounded-lg transition text-xs text-red-400">
+                    <i class="fa-solid fa-plug-circle-xmark mr-1"></i> Déconnecter
+                </button>
+            </div>
+        </div>
+
+        <!-- Terminal -->
+        <div class="glass rounded-xl overflow-hidden fade-in fade-in-delay-1">
+            <!-- Barre titre terminal -->
+            <div class="bg-slate-800/80 px-4 py-2 flex items-center justify-between border-b border-white/5">
+                <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-red-500"></span>
+                    <span class="w-3 h-3 rounded-full bg-yellow-500"></span>
+                    <span class="w-3 h-3 rounded-full bg-green-500"></span>
+                    <span class="text-gray-400 text-xs ml-2 font-mono">orinstone@bot:~$</span>
+                </div>
+                <span class="text-gray-500 text-xs" id="lineCount">0 lignes</span>
+            </div>
+
+            <!-- Zone de sortie -->
+            <div id="terminal" class="bg-slate-900/90 p-4 h-[60vh] overflow-y-auto select-text">
+                <div class="line-welcome">
+                    ╔══════════════════════════════════════════╗<br>
+                    ║   🖥️  Console Orinstone Bot v2.0         ║<br>
+                    ║   Tapez "help" pour les commandes        ║<br>
+                    ╚══════════════════════════════════════════╝
+                </div>
+            </div>
+
+            <!-- Zone de saisie -->
+            <div class="bg-slate-800/60 px-4 py-3 border-t border-white/5 flex items-center gap-2">
+                <span class="prompt font-mono text-sm">❯</span>
+                <input
+                    type="text"
+                    id="cmdInput"
+                    class="flex-1 bg-transparent border-none outline-none text-white font-mono text-sm placeholder-gray-600"
+                    placeholder="Entrez une commande..."
+                    autocomplete="off"
+                    spellcheck="false"
+                    disabled
+                >
+                <span id="cursorIndicator" class="cursor-blink text-green-400 font-mono">▊</span>
+            </div>
+        </div>
+
+        <!-- Raccourcis -->
+        <div class="glass rounded-xl p-4 mt-4 fade-in fade-in-delay-2">
+            <h3 class="text-sm font-semibold text-gray-300 mb-3"><i class="fa-solid fa-keyboard mr-1"></i> Raccourcis</h3>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                <div class="bg-slate-800/50 rounded-lg px-3 py-2 flex items-center gap-2">
+                    <kbd class="bg-slate-700 px-1.5 py-0.5 rounded text-gray-300">Entrée</kbd>
+                    <span class="text-gray-400">Exécuter</span>
+                </div>
+                <div class="bg-slate-800/50 rounded-lg px-3 py-2 flex items-center gap-2">
+                    <kbd class="bg-slate-700 px-1.5 py-0.5 rounded text-gray-300">↑↓</kbd>
+                    <span class="text-gray-400">Historique</span>
+                </div>
+                <div class="bg-slate-800/50 rounded-lg px-3 py-2 flex items-center gap-2">
+                    <kbd class="bg-slate-700 px-1.5 py-0.5 rounded text-gray-300">Ctrl+L</kbd>
+                    <span class="text-gray-400">Effacer</span>
+                </div>
+                <div class="bg-slate-800/50 rounded-lg px-3 py-2 flex items-center gap-2">
+                    <kbd class="bg-slate-700 px-1.5 py-0.5 rounded text-gray-300">Tab</kbd>
+                    <span class="text-gray-400">Auto-complétion</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="glass mt-8 py-4 text-center text-gray-500 text-xs">
+        <p>&copy; 2026 Orinstone Network — Console sécurisée</p>
+    </footer>
+
+    <script src="/assets/js/script.js"></script>
+    <script>
+        // =============================================
+        // VARIABLES
+        // =============================================
+        let ws = null;
+        let isAuthenticated = false;
+        let commandHistoryArr = [];
+        let historyIndex = -1;
+        let lineCounter = 0;
+        const terminal = document.getElementById('terminal');
+        const cmdInput = document.getElementById('cmdInput');
+        const wsStatusDot = document.getElementById('wsStatus');
+        const wsStatusText = document.getElementById('wsStatusText');
+        const lineCountEl = document.getElementById('lineCount');
+
+        const COMMANDS = ['help','status','stats','features','toggle','automod','eval','broadcast','guilds','uptime','memory','clear','history','ping'];
+
+        // =============================================
+        // WEBSOCKET
+        // =============================================
+        function connectWS() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/console`;
+
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                setWSStatus('online', 'Connecté');
+                // Auto-auth avec le token localStorage
+                const token = localStorage.getItem('panelToken');
+                if (token) {
+                    ws.send(JSON.stringify({ type: 'auth', token }));
+                }
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleWSMessage(data);
+                } catch (e) {
+                    appendLine('error', `Erreur parsing: ${e.message}`);
+                }
+            };
+
+            ws.onclose = () => {
+                setWSStatus('offline', 'Déconnecté');
+                isAuthenticated = false;
+                cmdInput.disabled = true;
+                cmdInput.placeholder = 'Déconnecté...';
+                appendLine('system', '🔌 Connexion perdue. Reconnexion dans 3s...');
+                setTimeout(connectWS, 3000);
+            };
+
+            ws.onerror = () => {
+                setWSStatus('offline', 'Erreur');
+            };
+        }
+
+        function handleWSMessage(data) {
+            switch (data.type) {
+                case 'auth_success':
+                    isAuthenticated = true;
+                    cmdInput.disabled = false;
+                    cmdInput.placeholder = 'Entrez une commande...';
+                    cmdInput.focus();
+                    appendLine('system', data.message);
+                    break;
+
+                case 'auth_error':
+                    appendLine('error', data.message);
+                    // Demander le mot de passe manuellement
+                    askPassword();
+                    break;
+
+                case 'output':
+                    appendLine('output', data.result, data.command);
+                    break;
+
+                case 'error':
+                    appendLine('error', data.message || data.result, data.command);
+                    break;
+
+                case 'system':
+                    appendLine('system', data.message);
+                    break;
+
+                case 'clear':
+                    clearTerminal();
+                    break;
+
+                case 'history':
+                    if (data.entries) {
+                        data.entries.forEach(entry => {
+                            if (entry.type === 'input') {
+                                appendLine('input', entry.command);
+                            } else if (entry.type === 'output') {
+                                appendLine('output', entry.result, entry.command);
+                            } else if (entry.type === 'error') {
+                                appendLine('error', entry.message, entry.command);
+                            }
+                        });
+                    }
+                    break;
+
+                case 'pong':
+                    appendLine('system', `🏓 Pong! (${Date.now() - data.timestamp}ms)`);
+                    break;
+            }
+        }
+
+        function sendCommand(cmd) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                appendLine('error', 'WebSocket non connecté');
+                return;
+            }
+            ws.send(JSON.stringify({ type: 'command', command: cmd }));
+        }
+
+        function disconnectWS() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        // =============================================
+        // TERMINAL UI
+        // =============================================
+        function appendLine(type, content, command = null) {
+            const div = document.createElement('div');
+            div.className = `line-${type} mb-1`;
+
+            const time = new Date().toLocaleTimeString('fr-FR');
+            const prefix = type === 'input'
+                ? `<span class="prompt">❯</span> `
+                : type === 'error'
+                    ? '<span class="text-red-400">✗</span> '
+                    : type === 'system'
+                        ? '<span class="text-green-400">ℹ</span> '
+                        : '<span class="text-gray-500">←</span> ';
+
+            const escaped = escapeHtml(content).replace(/\n/g, '<br>');
+            div.innerHTML = `<span class="text-gray-600 text-xs">[${time}]</span> ${prefix}${escaped}`;
+
+            terminal.appendChild(div);
+            terminal.scrollTop = terminal.scrollHeight;
+
+            lineCounter++;
+            lineCountEl.textContent = `${lineCounter} lignes`;
+        }
+
+        function clearTerminal() {
+            terminal.innerHTML = '';
+            lineCounter = 0;
+            lineCountEl.textContent = '0 lignes';
+            appendLine('system', '🧹 Console effacée');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function setWSStatus(state, text) {
+            wsStatusDot.className = `status-dot ${state === 'online' ? 'online status-pulse' : 'offline'}`;
+            wsStatusText.textContent = text;
+            wsStatusText.className = state === 'online' ? 'text-green-400' : 'text-red-400';
+        }
+
+        function askPassword() {
+            const pwd = prompt('Mot de passe console:');
+            if (pwd && ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'auth', token: pwd }));
+            }
+        }
+
+        // =============================================
+        // INPUT HANDLING
+        // =============================================
+        cmdInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const cmd = cmdInput.value.trim();
+                if (!cmd) return;
+
+                // Commande locale
+                if (cmd === 'clear') {
+                    clearTerminal();
+                    cmdInput.value = '';
+                    return;
+                }
+
+                // Ajouter à l'historique local
+                commandHistoryArr.push(cmd);
+                historyIndex = commandHistoryArr.length;
+
+                // Envoyer au serveur
+                appendLine('input', cmd);
+                sendCommand(cmd);
+                cmdInput.value = '';
+
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (historyIndex > 0) {
+                    historyIndex--;
+                    cmdInput.value = commandHistoryArr[historyIndex];
+                }
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (historyIndex < commandHistoryArr.length - 1) {
+                    historyIndex++;
+                    cmdInput.value = commandHistoryArr[historyIndex];
+                } else {
+                    historyIndex = commandHistoryArr.length;
+                    cmdInput.value = '';
+                }
+            } else if (e.key === 'Tab') {
+                e.preventDefault();
+                autoComplete();
+            } else if (e.ctrlKey && e.key === 'l') {
+                e.preventDefault();
+                clearTerminal();
+            }
+        });
+
+        function autoComplete() {
+            const val = cmdInput.value.toLowerCase();
+            const matches = COMMANDS.filter(c => c.startsWith(val));
+            if (matches.length === 1) {
+                cmdInput.value = matches[0] + ' ';
+            } else if (matches.length > 1) {
+                appendLine('system', `Suggestions: ${matches.join(', ')}`);
+            }
+        }
+
+        // Focus auto sur le terminal
+        terminal.addEventListener('click', () => cmdInput.focus());
+        document.addEventListener('keydown', (e) => {
+            if (e.target === cmdInput) return;
+            if (!e.ctrlKey && !e.altKey && e.key.length === 1) {
+                cmdInput.focus();
+            }
+        });
+
+        // =============================================
+        // INIT
+        // =============================================
+        connectWS();
+    </script>
+</body>
+</html>
