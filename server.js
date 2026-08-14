@@ -722,6 +722,25 @@ async function start() {
         sendLog('Dossier events/ introuvable', 'WARN');
     }
 
+    const Database = require('./managers/Database');
+    await Database.init();
+    sendLog('Base de données initialisée (JSON + MySQL)', 'SUCCESS');
+
+
+    process.on('SIGINT', async () => {
+    sendLog('Arrêt demandé (SIGINT)', 'WARN');
+    const Database = require('./managers/Database');
+    await Database.close();
+    process.exit(0);
+    });
+
+    process.on('SIGTERM', async () => {
+        sendLog('Arrêt demandé (SIGTERM)', 'WARN');
+        const Database = require('./managers/Database');
+        await Database.close();
+        process.exit(0);
+    });
+
     // Commandes
     const commandsPath = path.join(__dirname, 'commands');
     if (fs.existsSync(commandsPath)) {

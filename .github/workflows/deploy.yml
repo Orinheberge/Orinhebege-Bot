@@ -104,6 +104,13 @@ jobs:
           PTERO_API_KEY=${{ secrets.PTERO_API_KEY }}
           PTERO_SERVER_ID=${{ secrets.PTERO_SERVER_ID }}
           PTERO_PANEL_URL=${{ secrets.PTERO_PANEL_URL || 'https://panel.orinstone.deepstone.fr' }}
+          MAIN_GUILD_ID=${{secrets.MAIN_GUILD_ID }}
+          DB_STATUS=${{ secrets.DB_STATUS || 'off' }}
+          DB_HOST=${{ secrets.DB_HOST || 'localhost' }}
+          DB_PORT=${{ secrets.DB_PORT || '3306' }}
+          DB_USER=${{ secrets.DB_USER || 'root' }}
+          DB_PASSWORD=${{ secrets.DB_PASSWORD || '' }}
+          DB_NAME=${{ secrets.DB_NAME || 'orinstone_bot' }}
           ENVEOF"
 
       # --- Étape 3 : npm install + permissions ---
