@@ -1,54 +1,48 @@
 const express = require('express');
 const bodyParser = require('body-parser');
+const cookieParser = require('cookie-parser');
 const path = require('path');
-const cookieParser = require('cookie-parser'); // ✅ À installer
+const http = require('http');
 const Database = require('./Database');
 const StatusChecker = require('./StatusChecker');
+const WebConsole = require('./WebConsole');
 
 const WEB_PORT = parseInt(process.env.WEB_PORT) || 26162;
-const ADMIN_PASSWORD = process.env.PANEL_PASSWORD ;
+const ADMIN_PASSWORD = process.env.PANEL_PASSWORD;
 
 function startWebServer(client) {
     const app = express();
-    
+
     app.use(bodyParser.json());
     app.use(bodyParser.urlencoded({ extended: true }));
-    app.use(cookieParser()); // ✅ Parser les cookies
+    app.use(cookieParser());
     app.use(express.static(path.join(__dirname, '..', 'public')));
 
     // =============================================
-    // MIDDLEWARE AUTH UNIFIÉ (Cookie + Query + Header)
+    // AUTHENTIFICATION
     // =============================================
     function isAuthenticated(req) {
-        // 1. Vérifier le cookie (prioritaire)
         if (req.cookies?.panelToken === ADMIN_PASSWORD) return true;
-        // 2. Vérifier le header API
         if (req.headers['x-panel-token'] === ADMIN_PASSWORD) return true;
-        // 3. Vérifier la query string (fallback)
         if (req.query.token === ADMIN_PASSWORD) return true;
         return false;
     }
 
-    // Middleware API Auth
     const authApi = (req, res, next) => {
         if (isAuthenticated(req)) return next();
         return res.status(401).json({ success: false, error: 'Non authentifié' });
     };
 
-    // Middleware Page Auth
     const requireAuth = (req, res, next) => {
         if (isAuthenticated(req)) {
-            // ✅ Si authentifié via query string, créer un cookie et rediriger proprement
             if (req.query.token === ADMIN_PASSWORD && !req.cookies?.panelToken) {
                 res.cookie('panelToken', ADMIN_PASSWORD, {
                     httpOnly: true,
-                    secure: false, // Mettre true si HTTPS
+                    secure: false,
                     sameSite: 'lax',
-                    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 jours
+                    maxAge: 7 * 24 * 60 * 60 * 1000
                 });
-                // Rediriger vers la même URL sans le token apparent
-                const cleanUrl = req.path;
-                return res.redirect(cleanUrl);
+                return res.redirect(req.path);
             }
             return next();
         }
@@ -58,22 +52,19 @@ function startWebServer(client) {
     // =============================================
     // API ROUTES
     // =============================================
-    
     app.post('/api/login', (req, res) => {
         if (req.body.password === ADMIN_PASSWORD) {
-            // ✅ Créer un cookie sécurisé à la connexion
             res.cookie('panelToken', ADMIN_PASSWORD, {
                 httpOnly: true,
-                secure: false, // Mettre true si HTTPS
+                secure: false,
                 sameSite: 'lax',
-                maxAge: 7 * 24 * 60 * 60 * 1000 // 7 jours
+                maxAge: 7 * 24 * 60 * 60 * 1000
             });
             return res.json({ success: true, token: ADMIN_PASSWORD });
         }
         return res.status(401).json({ success: false, error: 'Mot de passe incorrect' });
     });
 
-    // ✅ Route déconnexion
     app.get('/api/logout', (req, res) => {
         res.clearCookie('panelToken');
         res.redirect('/login/');
@@ -96,10 +87,6 @@ function startWebServer(client) {
         res.json({ success: true, config: Database.load() });
     });
 
-    
-    app.get('/console/', requireAuth, (req, res) => res.redirect('/console'));
-
-    // === AUTOMOD API ===
     app.get('/api/automod', authApi, (req, res) => {
         res.json({ success: true, automod: Database.getAutomod() });
     });
@@ -113,16 +100,13 @@ function startWebServer(client) {
     app.post('/api/automod/filter', authApi, (req, res) => {
         const { filter, settings } = req.body;
         if (!filter || !settings) return res.status(400).json({ success: false, error: 'Paramètres manquants' });
-
         const current = Database.getAutomod();
         if (!current[filter]) return res.status(400).json({ success: false, error: 'Filtre inconnu' });
-
         for (const [key, value] of Object.entries(settings)) {
             if (key in current[filter]) {
                 Database.setAutomod(`${filter}.${key}`, value);
             }
         }
-
         console.log(`[PANEL] AutoMod filter "${filter}" updated`);
         res.json({ success: true, filter, settings });
     });
@@ -137,53 +121,47 @@ function startWebServer(client) {
     // =============================================
     // PAGE ROUTES
     // =============================================
-    
-    // Login (public)
-    app.get('/login', (req, res) => 
-        res.sendFile(path.join(__dirname, '..', 'public', 'login', 'index.html'))
-    );
-    app.get('/login/', (req, res) => 
-        res.sendFile(path.join(__dirname, '..', 'public', 'login', 'index.html'))
-    );
+    app.get('/login', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'login', 'index.html')));
+    app.get('/login/', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'login', 'index.html')));
 
-    app.get('/console', requireAuth, (req, res) => 
-    res.sendFile(path.join(__dirname, '..', 'public', 'console', 'index.html'))
-    );
-    
-    // Pages protégées
-    app.get('/', requireAuth, (req, res) => 
-        res.sendFile(path.join(__dirname, '..', 'public', 'index.html'))
-    );
-    
-    app.get('/features', requireAuth, (req, res) => 
-        res.sendFile(path.join(__dirname, '..', 'public', 'features', 'index.html'))
-    );
+    app.get('/', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'index.html')));
+
+    app.get('/features', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'features', 'index.html')));
     app.get('/features/', requireAuth, (req, res) => res.redirect('/features'));
-    
-    app.get('/status', requireAuth, (req, res) => 
-        res.sendFile(path.join(__dirname, '..', 'public', 'status', 'index.html'))
-    );
+
+    app.get('/status', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'status', 'index.html')));
     app.get('/status/', requireAuth, (req, res) => res.redirect('/status'));
-    
-    app.get('/config', requireAuth, (req, res) => 
-        res.sendFile(path.join(__dirname, '..', 'public', 'config', 'index.html'))
-    );
+
+    app.get('/config', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'config', 'index.html')));
     app.get('/config/', requireAuth, (req, res) => res.redirect('/config'));
-    
-    app.get('/about', requireAuth, (req, res) => 
-        res.sendFile(path.join(__dirname, '..', 'public', 'about', 'index.html'))
-    );
+
+    app.get('/about', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'about', 'index.html')));
     app.get('/about/', requireAuth, (req, res) => res.redirect('/about'));
-    
-    app.get('/automod', requireAuth, (req, res) => 
-        res.sendFile(path.join(__dirname, '..', 'public', 'automod', 'index.html'))
-    );
+
+    app.get('/automod', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'automod', 'index.html')));
     app.get('/automod/', requireAuth, (req, res) => res.redirect('/automod'));
 
-    app.listen(WEB_PORT, '0.0.0.0', () => {
+    app.get('/console', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'console', 'index.html')));
+    app.get('/console/', requireAuth, (req, res) => res.redirect('/console'));
+
+    // =============================================
+    // CRÉATION DU SERVEUR HTTP (nécessaire pour WebSocket)
+    // =============================================
+    const server = http.createServer(app);
+
+    // ✅ Exposer le client Discord pour la console
+    global.discordClient = client;
+
+    // ✅ Initialiser la WebSocket Console
+    WebConsole.init(server, ADMIN_PASSWORD);
+
+    // =============================================
+    // DÉMARRAGE
+    // =============================================
+    server.listen(WEB_PORT, '0.0.0.0', () => {
         console.log(`🌐 Panel web démarré sur http://0.0.0.0:${WEB_PORT}`);
-        console.log(`   → Login: https://hebergebot.deepstone.fr/login/`);
-        console.log(`   → Dashboard: https://hebergebot.deepstone.fr/`);
+        console.log(`   → Dashboard: http://localhost:${WEB_PORT}/`);
+        console.log(`   → Console:   http://localhost:${WEB_PORT}/console/`);
     });
 }
 

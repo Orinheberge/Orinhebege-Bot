@@ -5,29 +5,38 @@ const Database = require('./Database');
 class WebConsole {
     constructor() {
         this.wss = null;
-        this.clients = new Map(); // token -> { ws, authenticated, history }
+        this.clients = new Map();
         this.commandHistory = [];
         this.maxHistory = 500;
     }
 
-    /**
-     * Initialise le WebSocket server
-     */
     init(server, adminPassword) {
-        this.wss = new WebSocketServer({ server, path: '/ws/console' });
+        // ✅ Attachement au serveur HTTP existant (compatible Pterodactyl)
+        this.wss = new WebSocketServer({ 
+            server, 
+            path: '/ws/console',
+            // ✅ Important pour Pterodactyl : vérifier l'origine
+            verifyClient: (info, callback) => {
+                // Accepter toutes les origines en dev, restreindre en prod
+                callback(true);
+            }
+        });
 
         this.wss.on('connection', (ws, req) => {
             const clientId = uuidv4();
+            
+            // ✅ Récupérer l'IP réelle derrière le proxy Pterodactyl
+            const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+            
             this.clients.set(clientId, {
                 ws,
                 authenticated: false,
-                history: [],
+                ip,
                 connectedAt: new Date()
             });
 
-            console.log(`[CONSOLE] Client connecté: ${clientId}`);
+            console.log(`[CONSOLE] Client connecté: ${clientId} (${ip})`);
 
-            // Envoyer message de bienvenue
             this.send(clientId, {
                 type: 'system',
                 message: '🔌 Connecté à la console Orinstone. Tapez "help" pour la liste des commandes.',
@@ -49,17 +58,25 @@ class WebConsole {
             });
 
             ws.on('error', (err) => {
-                console.error(`[CONSOLE] Erreur client ${clientId}:`, err.message);
+                console.error(`[CONSOLE] Erreur ${clientId}:`, err.message);
                 this.clients.delete(clientId);
             });
+
+            // ✅ Ping keepalive pour éviter la déconnexion par timeout Pterodactyl
+            const pingInterval = setInterval(() => {
+                if (ws.readyState === 1) {
+                    ws.ping();
+                } else {
+                    clearInterval(pingInterval);
+                }
+            }, 30000);
+
+            ws.on('close', () => clearInterval(pingInterval));
         });
 
         console.log('✅ WebSocket Console démarré sur /ws/console');
     }
 
-    /**
-     * Gère les messages entrants
-     */
     handleMessage(clientId, msg, adminPassword) {
         const client = this.clients.get(clientId);
         if (!client) return;
@@ -69,7 +86,6 @@ class WebConsole {
                 if (msg.token === adminPassword) {
                     client.authenticated = true;
                     this.send(clientId, { type: 'auth_success', message: '✅ Authentifié avec succès' });
-                    // Envoyer l'historique récent
                     this.sendHistory(clientId);
                 } else {
                     this.send(clientId, { type: 'auth_error', message: '❌ Mot de passe incorrect' });
@@ -78,7 +94,7 @@ class WebConsole {
 
             case 'command':
                 if (!client.authenticated) {
-                    this.send(clientId, { type: 'error', message: 'Non authentifié. Envoyez {"type":"auth","token":"..."}' });
+                    this.send(clientId, { type: 'error', message: 'Non authentifié' });
                     return;
                 }
                 this.executeCommand(clientId, msg.command);
@@ -93,19 +109,11 @@ class WebConsole {
         }
     }
 
-    /**
-     * Exécute une commande
-     */
     async executeCommand(clientId, command) {
         const trimmed = command.trim();
         if (!trimmed) return;
 
-        // Log dans l'historique
-        const entry = {
-            type: 'input',
-            command: trimmed,
-            timestamp: new Date().toISOString()
-        };
+        const entry = { type: 'input', command: trimmed, timestamp: new Date().toISOString() };
         this.addToHistory(entry);
         this.broadcastToAuthenticated(entry);
 
@@ -120,61 +128,50 @@ class WebConsole {
                 case 'help':
                     result = this.getHelpText();
                     break;
-
                 case 'status':
                     result = await this.cmdStatus();
                     break;
-
                 case 'stats':
                     result = await this.cmdStats();
                     break;
-
                 case 'features':
                     result = this.cmdFeatures();
                     break;
-
                 case 'toggle':
                     result = this.cmdToggle(params);
                     break;
-
                 case 'automod':
                     result = this.cmdAutomod(params);
                     break;
-
                 case 'eval':
-                    result = await this.cmdEval(params.join(' '), clientId);
+                    result = await this.cmdEval(params.join(' '));
                     break;
-
                 case 'broadcast':
                     result = await this.cmdBroadcast(params.join(' '));
                     break;
-
                 case 'guilds':
                     result = this.cmdGuilds();
                     break;
-
                 case 'uptime':
                     result = this.cmdUptime();
                     break;
-
                 case 'memory':
                     result = this.cmdMemory();
                     break;
-
+                case 'restart':
+                    result = this.cmdRestart();
+                    break;
                 case 'clear':
                     this.send(clientId, { type: 'clear' });
                     return;
-
                 case 'history':
                     this.sendHistory(clientId);
                     return;
-
                 case 'ping':
                     result = `🏓 Pong! Latence: ${Date.now() - new Date(entry.timestamp).getTime()}ms`;
                     break;
-
                 default:
-                    result = `❌ Commande inconnue: "${cmd}". Tapez "help" pour la liste.`;
+                    result = `❌ Commande inconnue: "${cmd}". Tapez "help".`;
             }
 
             const output = {
@@ -183,7 +180,6 @@ class WebConsole {
                 result: typeof result === 'string' ? result : JSON.stringify(result, null, 2),
                 timestamp: new Date().toISOString()
             };
-
             this.addToHistory(output);
             this.broadcastToAuthenticated(output);
 
@@ -204,64 +200,63 @@ class WebConsole {
     // =============================================
 
     getHelpText() {
-        return `
-╔══════════════════════════════════════════╗
-║         📋 COMMANDES DISPONIBLES         ║
-╠══════════════════════════════════════════╣
-║  help          → Affiche cette aide      ║
-║  status        → Statut des services     ║
-║  stats         → Statistiques du bot     ║
-║  features      → Liste des fonctionnalités║
-║  toggle <nom>  → Active/désactive feature║
-║  automod       → Statut AutoMod          ║
-║  automod on/off→ Active/désactive AutoMod║
-║  guilds        → Liste des serveurs      ║
-║  uptime        → Temps de fonctionnement ║
-║  memory        → Usage mémoire           ║
-║  broadcast <msg>→ Message sur tous serveurs║
-║  eval <code>   → Exécute du JS (⚠️)     ║
-║  history       → Historique commandes    ║
-║  clear         → Efface la console       ║
-║  ping          → Test latence            ║
-╚══════════════════════════════════════════╝`.trim();
+        return [
+            '╔══════════════════════════════════════════╗',
+            '║         📋 COMMANDES DISPONIBLES         ║',
+            '╠══════════════════════════════════════════╣',
+            '║  help          → Affiche cette aide      ║',
+            '║  status        → Statut des services     ║',
+            '║  stats         → Statistiques du bot     ║',
+            '║  features      → Liste des fonctionnalités║',
+            '║  toggle <nom>  → Active/désactive feature║',
+            '║  automod       → Statut AutoMod          ║',
+            '║  automod on/off→ Active/désactive AutoMod║',
+            '║  guilds        → Liste des serveurs      ║',
+            '║  uptime        → Temps de fonctionnement ║',
+            '║  memory        → Usage mémoire           ║',
+            '║  restart       → Redémarre le bot        ║',
+            '║  broadcast <msg>→ Message tous serveurs  ║',
+            '║  eval <code>   → Exécute du JS (⚠️)     ║',
+            '║  history       → Historique commandes    ║',
+            '║  clear         → Efface la console       ║',
+            '║  ping          → Test latence            ║',
+            '╚══════════════════════════════════════════╝'
+        ].join('\n');
     }
 
     async cmdStatus() {
         const StatusChecker = require('./StatusChecker');
         const statuses = await StatusChecker.getAllStatus();
-        const lines = statuses.map(s => {
+        return statuses.map(s => {
             const icon = s.online ? '🟢' : '🔴';
             const lat = s.responseTime ? ` (${s.responseTime}ms)` : '';
             return `${icon} ${s.name}${lat}`;
-        });
-        return `📊 Statut des services:\n${lines.join('\n')}`;
+        }).join('\n');
     }
 
     async cmdStats() {
-        const client = this.getClient();
+        const client = global.discordClient;
         if (!client) return '❌ Client Discord non disponible';
-
         const uptime = process.uptime();
         const d = Math.floor(uptime / 86400);
         const h = Math.floor((uptime % 86400) / 3600);
         const m = Math.floor((uptime % 3600) / 60);
-
-        return `📈 Statistiques du bot:
-├── Serveurs: ${client.guilds.cache.size}
-├── Utilisateurs: ${client.users.cache.size}
-├── Commandes: ${client.commands.size}
-├── Latence WS: ${client.ws.ping}ms
-├── Uptime: ${d}j ${h}h ${m}m
-└── Node.js: ${process.version}`;
+        return [
+            '📈 Statistiques du bot:',
+            `├── Serveurs: ${client.guilds.cache.size}`,
+            `├── Utilisateurs: ${client.users.cache.size}`,
+            `├── Commandes: ${client.commands.size}`,
+            `├── Latence WS: ${client.ws.ping}ms`,
+            `├── Uptime: ${d}j ${h}h ${m}m`,
+            `└── Node.js: ${process.version}`
+        ].join('\n');
     }
 
     cmdFeatures() {
         const features = Database.get('features') || {};
-        const lines = Object.entries(features).map(([key, val]) => {
-            const icon = val ? '✅' : '❌';
-            return `${icon} ${key}`;
-        });
-        return `⚙️ Fonctionnalités:\n${lines.join('\n')}`;
+        return Object.entries(features).map(([key, val]) => 
+            `${val ? '✅' : '❌'} ${key}`
+        ).join('\n');
     }
 
     cmdToggle(params) {
@@ -269,8 +264,7 @@ class WebConsole {
         const feature = params[0];
         const current = Database.isFeatureEnabled(feature);
         Database.set(`features.${feature}`, !current);
-        const newState = !current ? 'activée' : 'désactivée';
-        return `🔄 Feature "${feature}" ${newState}`;
+        return `🔄 Feature "${feature}" ${!current ? 'activée' : 'désactivée'}`;
     }
 
     cmdAutomod(params) {
@@ -278,27 +272,20 @@ class WebConsole {
         if (!params.length) {
             const status = automod.enabled ? '🟢 Activé' : '🔴 Désactivé';
             const filters = Object.entries(automod)
-                .filter(([k]) => k !== 'enabled' && k !== 'exemptRoles' && k !== 'exemptChannels')
+                .filter(([k]) => !['enabled','exemptRoles','exemptChannels'].includes(k))
                 .map(([k, v]) => `${v.enabled ? '✅' : '❌'} ${k}`)
                 .join('\n');
             return `🛡️ AutoMod: ${status}\n\nFiltres:\n${filters}`;
         }
-        if (params[0] === 'on') {
-            Database.setAutomod('enabled', true);
-            return '🛡️ AutoMod activé';
-        }
-        if (params[0] === 'off') {
-            Database.setAutomod('enabled', false);
-            return '🛡️ AutoMod désactivé';
-        }
+        if (params[0] === 'on') { Database.setAutomod('enabled', true); return '🛡️ AutoMod activé'; }
+        if (params[0] === 'off') { Database.setAutomod('enabled', false); return '🛡️ AutoMod désactivé'; }
         return 'Usage: automod [on|off]';
     }
 
-    async cmdEval(code, clientId) {
-        if (!code) return 'Usage: eval <code JavaScript>';
+    async cmdEval(code) {
+        if (!code) return 'Usage: eval <code>';
         try {
-            const client = this.getClient();
-            // eslint-disable-next-line no-eval
+            const client = global.discordClient;
             const result = await eval(code);
             return `✅ Résultat:\n${typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result)}`;
         } catch (error) {
@@ -308,60 +295,45 @@ class WebConsole {
 
     async cmdBroadcast(message) {
         if (!message) return 'Usage: broadcast <message>';
-        const client = this.getClient();
-        if (!client) return '❌ Client Discord non disponible';
-
+        const client = global.discordClient;
+        if (!client) return '❌ Client non disponible';
         let sent = 0;
         for (const guild of client.guilds.cache.values()) {
             try {
                 const channel = guild.systemChannel || guild.channels.cache.find(c => c.type === 0);
-                if (channel) {
-                    await channel.send(`📢 **Annonce:** ${message}`);
-                    sent++;
-                }
+                if (channel) { await channel.send(`📢 **Annonce:** ${message}`); sent++; }
             } catch (e) {}
         }
-        return `📢 Message envoyé sur ${sent}/${client.guilds.cache.size} serveur(s)`;
+        return `📢 Envoyé sur ${sent}/${client.guilds.cache.size} serveur(s)`;
     }
 
     cmdGuilds() {
-        const client = this.getClient();
-        if (!client) return '❌ Client Discord non disponible';
-
-        const guilds = client.guilds.cache.map(g =>
+        const client = global.discordClient;
+        if (!client) return '❌ Client non disponible';
+        return client.guilds.cache.map(g => 
             `• ${g.name} (${g.memberCount} membres) [${g.id}]`
-        );
-        return `🌐 Serveurs (${guilds.length}):\n${guilds.join('\n')}`;
+        ).join('\n');
     }
 
     cmdUptime() {
-        const uptime = process.uptime();
-        const d = Math.floor(uptime / 86400);
-        const h = Math.floor((uptime % 86400) / 3600);
-        const m = Math.floor((uptime % 3600) / 60);
-        const s = Math.floor(uptime % 60);
-        return `⏱️ Uptime: ${d} jours, ${h} heures, ${m} minutes, ${s} secondes`;
+        const u = process.uptime();
+        return `⏱️ ${Math.floor(u/86400)}j ${Math.floor((u%86400)/3600)}h ${Math.floor((u%3600)/60)}m ${Math.floor(u%60)}s`;
     }
 
     cmdMemory() {
-        const mem = process.memoryUsage();
-        const format = (bytes) => `${(bytes / 1024 / 1024).toFixed(2)} MB`;
-        return `💾 Mémoire:
-├── RSS: ${format(mem.rss)}
-├── Heap Total: ${format(mem.heapTotal)}
-├── Heap Used: ${format(mem.heapUsed)}
-└── External: ${format(mem.external)}`;
+        const m = process.memoryUsage();
+        const f = (b) => `${(b/1024/1024).toFixed(2)} MB`;
+        return `💾 RSS: ${f(m.rss)} | Heap: ${f(m.heapUsed)}/${f(m.heapTotal)} | Ext: ${f(m.external)}`;
+    }
+
+    cmdRestart() {
+        setTimeout(() => process.exit(0), 1000);
+        return '🔄 Redémarrage dans 1 seconde... (Pterodactyl va relancer automatiquement)';
     }
 
     // =============================================
     // UTILITAIRES
     // =============================================
-
-    getClient() {
-        // Récupérer le client Discord depuis le cache global
-        // Le client est passé au démarrage via startWebServer
-        return global.discordClient || null;
-    }
 
     send(clientId, data) {
         const client = this.clients.get(clientId);
@@ -372,25 +344,17 @@ class WebConsole {
 
     broadcastToAuthenticated(data) {
         for (const [id, client] of this.clients) {
-            if (client.authenticated) {
-                this.send(id, data);
-            }
+            if (client.authenticated) this.send(id, data);
         }
     }
 
     addToHistory(entry) {
         this.commandHistory.push(entry);
-        if (this.commandHistory.length > this.maxHistory) {
-            this.commandHistory.shift();
-        }
+        if (this.commandHistory.length > this.maxHistory) this.commandHistory.shift();
     }
 
     sendHistory(clientId) {
-        const recent = this.commandHistory.slice(-50);
-        this.send(clientId, {
-            type: 'history',
-            entries: recent
-        });
+        this.send(clientId, { type: 'history', entries: this.commandHistory.slice(-50) });
     }
 }
 

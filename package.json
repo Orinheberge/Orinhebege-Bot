@@ -1,7 +1,7 @@
 {
   "name": "orinstone-discord-bot",
-  "version": "2.0.0",
-  "description": "Bot Discord Orinstone - Tickets, modération, niveaux, AutoMod, statut des services, panel web et commandes fun",
+  "version": "2.1.0",
+  "description": "Bot Discord Orinstone - Tickets, modération, niveaux, AutoMod, statut des services, panel web, console WebSocket et commandes fun",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
@@ -20,6 +20,8 @@
     "levels",
     "automod",
     "panel",
+    "console",
+    "websocket",
     "orinstone"
   ],
   "author": "Orinstone",
@@ -32,7 +34,9 @@
     "cookie-parser": "^1.4.7",
     "discord.js": "^14.16.3",
     "dotenv": "^16.4.7",
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "uuid": "^11.1.0",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.9"
