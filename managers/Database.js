@@ -1,9 +1,16 @@
 const fs = require('fs');
 const path = require('path');
-const MySQL = require('./MySQL');
 
 const DB_PATH = path.join(__dirname, '..', 'database.json');
-const MAIN_GUILD_ID = process.env.DISCORD_GUILD_ID;
+const MAIN_GUILD_ID = process.env.MAIN_GUILD_ID || process.env.DISCORD_GUILD_ID;
+
+// Import MySQL avec protection
+let MySQL = null;
+try {
+    MySQL = require('./MySQL');
+} catch (e) {
+    console.warn('[Database] ⚠️ Module MySQL indisponible, mode JSON uniquement');
+}
 
 const defaultData = {
     ticketCategory: null,
@@ -46,32 +53,10 @@ const defaultData = {
             action: "delete",
             notifyUser: true
         },
-        invites: {
-            enabled: true,
-            action: "delete",
-            notifyUser: true
-        },
-        caps: {
-            enabled: false,
-            minChars: 10,
-            maxPercent: 70,
-            action: "delete",
-            notifyUser: true
-        },
-        spam: {
-            enabled: true,
-            maxMessages: 5,
-            timeWindow: 3000,
-            action: "mute",
-            muteDuration: 600000,
-            notifyUser: true
-        },
-        massMention: {
-            enabled: true,
-            maxMentions: 5,
-            action: "delete",
-            notifyUser: true
-        },
+        invites: { enabled: true, action: "delete", notifyUser: true },
+        caps: { enabled: false, minChars: 10, maxPercent: 70, action: "delete", notifyUser: true },
+        spam: { enabled: true, maxMessages: 5, timeWindow: 3000, action: "mute", muteDuration: 600000, notifyUser: true },
+        massMention: { enabled: true, maxMentions: 5, action: "delete", notifyUser: true },
         exemptRoles: [],
         exemptChannels: []
     }
@@ -84,12 +69,15 @@ class Database {
     // =============================================
 
     static isMainGuild(guildId) {
-        if (!guildId) return true; // Pas de guildId = serveur principal
+        if (!guildId) return true;
         return String(guildId) === String(MAIN_GUILD_ID);
     }
 
     static useMySQL(guildId) {
-        return MySQL.isEnabled() && !this.isMainGuild(guildId);
+        // ✅ Protection : si MySQL n'est pas chargé, toujours retourner false
+        if (!MySQL || typeof MySQL.isEnabled !== 'function') return false;
+        if (!MySQL.isEnabled()) return false;
+        return !this.isMainGuild(guildId);
     }
 
     // =============================================
@@ -124,13 +112,11 @@ class Database {
     }
 
     // =============================================
-    // LOAD / SAVE (route automatiquement)
+    // LOAD / SAVE
     // =============================================
 
     static load(guildId) {
-        if (this.useMySQL(guildId)) {
-            return null; // MySQL se gère via les méthodes async
-        }
+        if (this.useMySQL(guildId)) return null;
         return this.loadJSON();
     }
 
@@ -139,13 +125,11 @@ class Database {
     }
 
     // =============================================
-    // GET / SET (route automatiquement)
+    // GET / SET
     // =============================================
 
     static get(key, guildId) {
-        if (this.useMySQL(guildId)) {
-            return null; // Utiliser les méthodes async MySQL
-        }
+        if (this.useMySQL(guildId)) return null;
         const data = this.loadJSON();
         if (key.startsWith('features.')) {
             const featureKey = key.split('.')[1];
@@ -169,20 +153,20 @@ class Database {
     }
 
     static isFeatureEnabled(feature, guildId) {
-        if (this.useMySQL(guildId)) {
-            return true; // Par défaut activé pour MySQL, configurable via guild_config
+        // ✅ Si MySQL non dispo ou serveur principal → lire depuis JSON
+        if (!this.useMySQL(guildId)) {
+            return this.get(`features.${feature}`);
         }
-        return this.get(`features.${feature}`);
+        // Pour MySQL, par défaut activé (configurable via guild_config plus tard)
+        return true;
     }
 
     // =============================================
-    // AUTOMOD (route automatiquement)
+    // AUTOMOD
     // =============================================
 
     static getAutomod(guildId) {
-        if (this.useMySQL(guildId)) {
-            return null; // Utiliser getAutomodAsync
-        }
+        if (this.useMySQL(guildId)) return null;
         const data = this.loadJSON();
         return data.automod || defaultData.automod;
     }
@@ -212,23 +196,14 @@ class Database {
     }
 
     // =============================================
-    // LEVELS (route automatiquement)
+    // LEVELS
     // =============================================
 
     static async getUserLevel(userId, guildId) {
         if (this.useMySQL(guildId)) {
             const row = await MySQL.getLevel(guildId, userId);
-            return {
-                xp: row.xp,
-                level: row.level,
-                messageXP: row.message_xp,
-                voiceXP: row.voice_xp,
-                totalMessages: row.total_messages,
-                voiceTime: row.voice_time,
-                lastMessageXP: row.last_message_xp
-            };
+            return { xp: row.xp, level: row.level, messageXP: row.message_xp, voiceXP: row.voice_xp, totalMessages: row.total_messages, voiceTime: row.voice_time, lastMessageXP: row.last_message_xp };
         }
-        // JSON : utiliser LevelDB
         const LevelDB = require('./LevelDB');
         return LevelDB.getUser(userId, guildId);
     }
@@ -244,30 +219,20 @@ class Database {
     static async getLeaderboard(guildId, limit = 10) {
         if (this.useMySQL(guildId)) {
             const rows = await MySQL.getLeaderboard(guildId, limit);
-            return rows.map(r => ({
-                userId: r.user_id,
-                xp: r.xp,
-                level: r.level,
-                totalMessages: r.total_messages,
-                voiceTime: r.voice_time
-            }));
+            return rows.map(r => ({ userId: r.user_id, xp: r.xp, level: r.level, totalMessages: r.total_messages, voiceTime: r.voice_time }));
         }
         const LevelDB = require('./LevelDB');
         return LevelDB.getLeaderboard(guildId, limit);
     }
 
     static async getRank(userId, guildId) {
-        if (this.useMySQL(guildId)) {
-            return MySQL.getRank(guildId, userId);
-        }
+        if (this.useMySQL(guildId)) return MySQL.getRank(guildId, userId);
         const LevelDB = require('./LevelDB');
         return LevelDB.getRank(userId, guildId);
     }
 
     static async resetLevel(userId, guildId) {
-        if (this.useMySQL(guildId)) {
-            return MySQL.resetLevel(guildId, userId);
-        }
+        if (this.useMySQL(guildId)) return MySQL.resetLevel(guildId, userId);
         const LevelDB = require('./LevelDB');
         const data = LevelDB.load();
         delete data[`${guildId}-${userId}`];
@@ -275,54 +240,41 @@ class Database {
     }
 
     // =============================================
-    // WARNINGS (route automatiquement)
+    // WARNINGS
     // =============================================
 
     static async addWarning(userId, guildId, reason, moderator) {
-        if (this.useMySQL(guildId)) {
-            return MySQL.addWarning(guildId, userId, reason, moderator);
-        }
+        if (this.useMySQL(guildId)) return MySQL.addWarning(guildId, userId, reason, moderator);
         const WarnDB = require('./WarnDB');
         return WarnDB.add(userId, guildId, reason, moderator);
     }
 
     static async getWarnings(userId, guildId) {
-        if (this.useMySQL(guildId)) {
-            return MySQL.getWarnings(guildId, userId);
-        }
+        if (this.useMySQL(guildId)) return MySQL.getWarnings(guildId, userId);
         const WarnDB = require('./WarnDB');
         return WarnDB.get(userId, guildId);
     }
 
     static async clearWarnings(userId, guildId) {
-        if (this.useMySQL(guildId)) {
-            return MySQL.clearWarnings(guildId, userId);
-        }
+        if (this.useMySQL(guildId)) return MySQL.clearWarnings(guildId, userId);
         const WarnDB = require('./WarnDB');
         return WarnDB.clear(userId, guildId);
     }
 
     // =============================================
-    // TICKETS (route automatiquement)
+    // TICKETS
     // =============================================
 
     static async createTicket(guildId, channelId, userId) {
-        if (this.useMySQL(guildId)) {
-            return MySQL.createTicket(guildId, channelId, userId);
-        }
-        // JSON : pas de suivi tickets persistant
+        if (this.useMySQL(guildId)) return MySQL.createTicket(guildId, channelId, userId);
     }
 
     static async closeTicket(channelId) {
-        if (MySQL.isEnabled()) {
-            return MySQL.closeTicket(channelId);
-        }
+        if (MySQL && MySQL.isEnabled()) return MySQL.closeTicket(channelId);
     }
 
     static async getOpenTicket(guildId, userId) {
-        if (MySQL.isEnabled()) {
-            return MySQL.getOpenTicket(guildId, userId);
-        }
+        if (MySQL && MySQL.isEnabled()) return MySQL.getOpenTicket(guildId, userId);
         return null;
     }
 
@@ -331,10 +283,7 @@ class Database {
     // =============================================
 
     static async addLog(guildId, type, message) {
-        if (this.useMySQL(guildId)) {
-            return MySQL.addLog(guildId, type, message);
-        }
-        // JSON : les logs vont dans le salon Discord uniquement
+        if (this.useMySQL(guildId)) return MySQL.addLog(guildId, type, message);
     }
 
     // =============================================
@@ -342,18 +291,20 @@ class Database {
     // =============================================
 
     static async init() {
-        if (MySQL.isEnabled()) {
+        if (MySQL && typeof MySQL.isEnabled === 'function' && MySQL.isEnabled()) {
             const ok = await MySQL.init();
             if (ok) {
                 console.log(`[DB] MySQL activé pour les serveurs secondaires (main: ${MAIN_GUILD_ID})`);
             }
         } else {
-            console.log('[DB] Mode JSON uniquement (MySQL désactivé)');
+            console.log('[DB] Mode JSON uniquement (MySQL désactivé ou indisponible)');
         }
     }
 
     static async close() {
-        await MySQL.close();
+        if (MySQL && typeof MySQL.close === 'function') {
+            await MySQL.close();
+        }
     }
 }
 
