@@ -1,6 +1,6 @@
 /**
- * Orinstone Panel - Script Principal v2.0
- * Gère l'authentification, la navigation, les notifications et utilitaires partagés
+ * Orinstone Panel - Script Principal v2.1
+ * Authentification via cookies + localStorage fallback
  */
 
 const Panel = {
@@ -10,38 +10,73 @@ const Panel = {
     // =============================================
     // INITIALISATION
     // =============================================
-
     init() {
+        // Essayer de récupérer le token depuis localStorage
         this.token = localStorage.getItem('panelToken');
-        this.injectTokenInNavLinks();
-        this.highlightActiveNav();
-        this.setupKeyboardShortcuts();
-        console.log('[Panel] Initialisé');
+        
+        // Si pas de token localStorage, vérifier si on est authentifié via cookie
+        // en faisant un appel API test
+        if (!this.token) {
+            this.verifyCookieAuth();
+        } else {
+            this.injectTokenInNavLinks();
+            this.highlightActiveNav();
+            this.setupKeyboardShortcuts();
+        }
+    },
+
+    /**
+     * Vérifie si le cookie d'authentification est valide
+     */
+    async verifyCookieAuth() {
+        try {
+            const res = await fetch('/api/config', {
+                credentials: 'include'
+            });
+            
+            if (res.ok) {
+                // Cookie valide, on peut continuer
+                this.injectTokenInNavLinks();
+                this.highlightActiveNav();
+                this.setupKeyboardShortcuts();
+                
+                // Déclencher un événement pour que les pages sachent qu'on est auth
+                document.dispatchEvent(new CustomEvent('panel:authenticated'));
+            } else {
+                // Cookie invalide ou expiré
+                this.logout();
+            }
+        } catch (e) {
+            console.error('[Panel] Erreur vérification auth:', e);
+            this.logout();
+        }
     },
 
     // =============================================
     // AUTHENTIFICATION
     // =============================================
-
-    /**
-     * Vérifie si l'utilisateur est authentifié
-     */
     isAuthenticated() {
-        return !!localStorage.getItem('panelToken');
+        return !!localStorage.getItem('panelToken') || this.hasValidCookie();
     },
 
     /**
-     * Déconnexion complète
+     * Vérifie synchronement si un cookie panelToken existe
      */
+    hasValidCookie() {
+        return document.cookie.split(';').some(c => c.trim().startsWith('panelToken='));
+    },
+
     logout() {
         localStorage.removeItem('panelToken');
         this.token = null;
-        window.location.href = '/login/';
+        
+        // Supprimer le cookie côté serveur
+        fetch('/api/logout', { credentials: 'include' })
+            .finally(() => {
+                window.location.href = '/login/';
+            });
     },
 
-    /**
-     * Redirige vers login si non authentifié
-     */
     requireAuth() {
         if (!this.isAuthenticated()) {
             window.location.href = '/login/';
@@ -53,13 +88,11 @@ const Panel = {
     // =============================================
     // NAVIGATION
     // =============================================
-
-    /**
-     * Injecte le token dans tous les liens de navigation et data-auth-link
-     * Supporte les URLs relatives et absolues
-     */
     injectTokenInNavLinks() {
-        if (!this.token) return;
+        // Avec les cookies, plus besoin d'injecter le token dans les URLs
+        // Mais on garde pour compatibilité avec l'ancien système
+        const token = this.token || localStorage.getItem('panelToken');
+        if (!token) return;
 
         document.querySelectorAll('.nav-link, [data-auth-link]').forEach(link => {
             try {
@@ -67,21 +100,14 @@ const Panel = {
                 if (!href || href.startsWith('http') || href.startsWith('#')) return;
 
                 const url = new URL(href, window.location.origin);
-                // Ne pas écraser un token déjà présent
                 if (!url.searchParams.has('token')) {
-                    url.searchParams.set('token', this.token);
+                    url.searchParams.set('token', token);
                     link.href = url.toString();
                 }
-            } catch (e) {
-                // URL invalide, ignorer silencieusement
-            }
+            } catch (e) {}
         });
     },
 
-    /**
-     * Met en surbrillance le lien de navigation actif
-     * Gère les chemins avec et sans slash final
-     */
     highlightActiveNav() {
         const currentPath = window.location.pathname.replace(/\/$/, '') || '/';
 
@@ -91,12 +117,7 @@ const Panel = {
                 if (!href) return;
 
                 const linkPath = new URL(href, window.location.origin).pathname.replace(/\/$/, '') || '/';
-
-                if (linkPath === currentPath) {
-                    link.classList.add('active');
-                } else {
-                    link.classList.remove('active');
-                }
+                link.classList.toggle('active', linkPath === currentPath);
             } catch (e) {}
         });
     },
@@ -104,30 +125,19 @@ const Panel = {
     // =============================================
     // NOTIFICATIONS
     // =============================================
-
-    /**
-     * Affiche une notification toast
-     * @param {string} message
-     * @param {'success'|'error'|'info'|'warning'} type
-     * @param {number} duration - ms (0 = permanent)
-     */
     notify(message, type = 'success', duration = 3000) {
         const notif = document.getElementById('notification');
-        if (!notif) {
-            console.warn('[Panel] #notification introuvable dans le DOM');
-            return;
-        }
+        if (!notif) return;
 
-        // Annuler toute notification précédente
         if (this._notifyTimeout) {
             clearTimeout(this._notifyTimeout);
             this._notifyTimeout = null;
         }
 
         const config = {
-            success: { bg: 'bg-green-500',  icon: 'fa-circle-check' },
-            error:   { bg: 'bg-red-500',    icon: 'fa-circle-xmark' },
-            info:    { bg: 'bg-blue-500',   icon: 'fa-circle-info' },
+            success: { bg: 'bg-green-500', icon: 'fa-circle-check' },
+            error:   { bg: 'bg-red-500', icon: 'fa-circle-xmark' },
+            info:    { bg: 'bg-blue-500', icon: 'fa-circle-info' },
             warning: { bg: 'bg-yellow-500', icon: 'fa-triangle-exclamation' }
         };
 
@@ -151,32 +161,24 @@ const Panel = {
     // =============================================
     // API
     // =============================================
-
-    /**
-     * Requête API authentifiée
-     * Gère automatiquement le token, les erreurs 401 et le JSON
-     * @param {string} url
-     * @param {Object} options - fetch options
-     * @returns {Promise<Object>}
-     */
     async api(url, options = {}) {
-        if (!this.token) {
-            this.logout();
-            throw new Error('Non authentifié');
-        }
-
         const headers = {
             'Content-Type': 'application/json',
-            'X-Panel-Token': this.token,
             ...(options.headers || {})
         };
 
-        // Ajouter le token en query string aussi (pour compatibilité middleware)
-        const separator = url.includes('?') ? '&' : '?';
-        const fullUrl = `${url}${separator}token=${encodeURIComponent(this.token)}`;
+        // Ajouter le token header si disponible
+        const token = this.token || localStorage.getItem('panelToken');
+        if (token) {
+            headers['X-Panel-Token'] = token;
+        }
 
         try {
-            const res = await fetch(fullUrl, { ...options, headers });
+            const res = await fetch(url, {
+                ...options,
+                headers,
+                credentials: 'include' // ✅ Envoie automatiquement les cookies
+            });
 
             if (res.status === 401) {
                 this.notify('Session expirée, redirection...', 'warning', 1500);
@@ -201,43 +203,25 @@ const Panel = {
     // =============================================
     // UTILITAIRES
     // =============================================
-
-    /**
-     * Formate un uptime en secondes vers une chaîne lisible
-     * @param {number} seconds
-     * @returns {string}
-     */
     formatUptime(seconds) {
         const d = Math.floor(seconds / 86400);
         const h = Math.floor((seconds % 86400) / 3600);
         const m = Math.floor((seconds % 3600) / 60);
         const s = Math.floor(seconds % 60);
-
         const parts = [];
         if (d > 0) parts.push(`${d}j`);
         if (h > 0) parts.push(`${h}h`);
         if (m > 0) parts.push(`${m}m`);
         if (s > 0 || parts.length === 0) parts.push(`${s}s`);
-
         return parts.join(' ');
     },
 
-    /**
-     * Formate un nombre avec séparateurs de milliers
-     * @param {number} num
-     * @returns {string}
-     */
     formatNumber(num) {
         return Number(num).toLocaleString('fr-FR');
     },
 
-    /**
-     * Raccourci clavier : Ctrl+K → focus recherche (extensible)
-     * Escape → fermer notification
-     */
     setupKeyboardShortcuts() {
         document.addEventListener('keydown', (e) => {
-            // Escape : fermer la notification active
             if (e.key === 'Escape') {
                 const notif = document.getElementById('notification');
                 if (notif && !notif.classList.contains('hidden')) {
@@ -253,20 +237,13 @@ const Panel = {
         });
     },
 
-    /**
-     * Auto-refresh placeholder — à étendre par page
-     */
-    setupAutoRefresh() {
-        // Les pages individuelles appellent setInterval elles-mêmes
-        // Cette méthode existe pour une éventuelle centralisation future
-    }
+    setupAutoRefresh() {}
 };
 
 // =============================================
 // VÉRIFICATION D'AUTHENTIFICATION GLOBALE
 // =============================================
 document.addEventListener('DOMContentLoaded', () => {
-    // Pages publiques qui ne nécessitent pas d'authentification
     const publicPages = ['/login/', '/login'];
     const currentPath = window.location.pathname;
 
@@ -275,8 +252,11 @@ document.addEventListener('DOMContentLoaded', () => {
     );
 
     if (!isPublicPage) {
-        const token = localStorage.getItem('panelToken');
-        if (!token) {
+        // Vérifier localStorage OU cookie
+        const hasLocalStorage = !!localStorage.getItem('panelToken');
+        const hasCookie = document.cookie.split(';').some(c => c.trim().startsWith('panelToken='));
+        
+        if (!hasLocalStorage && !hasCookie) {
             window.location.href = '/login/';
             return;
         }
@@ -288,5 +268,5 @@ document.addEventListener('DOMContentLoaded', () => {
 // =============================================
 // EXPOSITION GLOBALE
 // =============================================
-window.Panel  = Panel;
+window.Panel = Panel;
 window.logout = () => Panel.logout();

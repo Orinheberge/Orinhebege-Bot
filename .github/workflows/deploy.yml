@@ -9,9 +9,6 @@ on:
 permissions:
   contents: write
 
-# =============================================
-# VARIABLES GLOBALES
-# =============================================
 env:
   DEPLOY_PATH: /var/lib/pterodactyl/volumes/8e4cb01d-97ad-42f7-a9c8-9e21c859d26b
   SSH_HOST: 5.48.143.126
@@ -19,7 +16,7 @@ env:
 
 jobs:
   # =============================================
-  # JOB 1 : DÉPLOIEMENT SUR PTERODACTYL
+  # JOB 1 : DÉPLOIEMENT
   # =============================================
   deploy:
     name: 🚀 Deploy to Pterodactyl
@@ -44,7 +41,6 @@ jobs:
       - name: Install rsync & sshpass
         run: sudo apt-get update && sudo apt-get install -y rsync sshpass
 
-      # --- Vérification des secrets requis ---
       - name: Check required secrets
         run: |
           MISSING=""
@@ -61,7 +57,7 @@ jobs:
           fi
           echo "✅ Tous les secrets requis sont présents"
 
-      # --- Déploiement des fichiers via rsync ---
+      # --- Étape 1 : Rsync des fichiers ---
       - name: Deploy files via rsync
         env:
           SSH_PASS: ${{ secrets.SSH_PASSWORD }}
@@ -84,61 +80,42 @@ jobs:
             ./ \
             ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/
 
-      # --- Post-déploiement : .env + npm + permissions + restart ---
-      - name: Post-deploy (env, npm, permissions, restart)
+      # --- Étape 2 : Créer le .env sur le serveur ---
+      - name: Create .env on server
         env:
           SSH_PASS: ${{ secrets.SSH_PASSWORD }}
-          PTERO_API_KEY: ${{ secrets.PTERO_API_KEY }}
-          PTERO_SERVER_ID: ${{ secrets.PTERO_SERVER_ID }}
         run: |
           sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no \
-            ${{ env.SSH_USER }}@${{ env.SSH_HOST }} bash -s <<'REMOTE'
-          
-          cd ${{ env.DEPLOY_PATH }}
-          
-          # === Vérification package.json ===
-          if [ ! -f "package.json" ]; then
-              echo "❌ package.json introuvable !"
-              exit 1
-          fi
-          
-          # === Création du fichier .env depuis les secrets ===
-          cat > .env << 'ENVEOF'
+            ${{ env.SSH_USER }}@${{ env.SSH_HOST }} \
+            "cat > ${{ env.DEPLOY_PATH }}/.env << 'ENVEOF'
           DISCORD_TOKEN=${{ secrets.DISCORD_TOKEN }}
           DISCORD_CLIENT_ID=${{ secrets.DISCORD_CLIENT_ID }}
           DISCORD_GUILD_ID=${{ secrets.DISCORD_GUILD_ID }}
           BOT_PREFIX=${{ secrets.BOT_PREFIX || '!' }}
           PANEL_PASSWORD=${{ secrets.PANEL_PASSWORD }}
           WEB_PORT=${{ secrets.WEB_PORT || '26162' }}
-          ENVEOF
-          
-          chmod 600 .env
-          echo "✅ .env créé et sécurisé (chmod 600)"
-          
-          # === Installation des dépendances ===
-          echo "📦 Installation des dépendances..."
-          npm ci --omit=dev --no-audit --no-fund 2>/dev/null || npm install --omit=dev --no-audit --no-fund
-          echo "✅ Dépendances installées"
-          
-          # === Permissions ===
-          chown -R 1000:1000 ${{ env.DEPLOY_PATH }}
-          chmod -R 755 ${{ env.DEPLOY_PATH }}
-          
-          # Protéger les fichiers de données
-          for f in database.json warns.json levels.json reglement.json .env; do
-              if [ -f "$f" ]; then
-                  chmod 644 "$f"
-                  echo "✅ $f protégé"
-              fi
-          done
-          
-          # .env en lecture seule pour le owner
-          chmod 600 .env
-          
-          echo "✅ Déploiement des fichiers terminé"
-          REMOTE
+          ENVEOF"
 
-          # === Redémarrage via API Pterodactyl ===
+      # --- Étape 3 : npm install + permissions ---
+      - name: Install dependencies & set permissions
+        env:
+          SSH_PASS: ${{ secrets.SSH_PASSWORD }}
+        run: |
+          sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no \
+            ${{ env.SSH_USER }}@${{ env.SSH_HOST }} \
+            "cd ${{ env.DEPLOY_PATH }} && \
+             npm ci --omit=dev --no-audit --no-fund 2>/dev/null || npm install --omit=dev --no-audit --no-fund && \
+             chmod 600 .env && \
+             chown -R 1000:1000 ${{ env.DEPLOY_PATH }} && \
+             chmod -R 755 ${{ env.DEPLOY_PATH }} && \
+             echo '✅ Dépendances installées et permissions OK'"
+
+      # --- Étape 4 : Redémarrage via API Pterodactyl ---
+      - name: Restart via Pterodactyl API
+        env:
+          PTERO_API_KEY: ${{ secrets.PTERO_API_KEY }}
+          PTERO_SERVER_ID: ${{ secrets.PTERO_SERVER_ID }}
+        run: |
           echo "🔄 Redémarrage du serveur Pterodactyl..."
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
             -X POST \
@@ -148,40 +125,31 @@ jobs:
             "https://panel.orinstone.deepstone.fr/api/client/servers/${PTERO_SERVER_ID}/power")
 
           if [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "200" ]; then
-              echo "✅ Serveur redémarré avec succès (HTTP $HTTP_CODE)"
+            echo "✅ Serveur redémarré avec succès (HTTP $HTTP_CODE)"
           else
-              echo "⚠️ Réponse API Pterodactyl: HTTP $HTTP_CODE"
-              echo "🔄 Tentative de restart via SSH..."
-              sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no \
-                ${{ env.SSH_USER }}@${{ env.SSH_HOST }} bash -s <<'REMOTE_SSH'
-              
-              # Trouver le conteneur Pterodactyl du bot
-              CONTAINER_ID=$(docker ps \
-                --filter "name=8e4cb01d" \
-                --format "{{.ID}}" 2>/dev/null | head -1)
-              
-              if [ -z "$CONTAINER_ID" ]; then
-                  # Fallback : chercher par volume
-                  CONTAINER_ID=$(docker ps \
-                    --format "{{.ID}} {{.Mounts}}" \
-                    | grep "8e4cb01d" \
-                    | awk '{print $1}' \
-                    | head -1)
-              fi
-              
-              if [ -n "$CONTAINER_ID" ]; then
-                  echo "📦 Conteneur trouvé: $CONTAINER_ID"
-                  docker exec "$CONTAINER_ID" pkill -f "node" 2>/dev/null || true
-                  echo "✅ Processus node arrêté (watchdog Pterodactyl va relancer)"
-              else
-                  echo "⚠️ Conteneur non trouvé automatiquement"
-                  echo "   Vérifiez manuellement sur le panel Pterodactyl"
-              fi
-              REMOTE_SSH
+            echo "⚠️ API Pterodactyl a répondu HTTP $HTTP_CODE"
+            echo "🔄 Tentative de restart via SSH..."
           fi
 
+      # --- Étape 5 : Fallback restart via SSH (seulement si API échoue) ---
+      - name: Fallback restart via SSH
+        if: failure()
+        env:
+          SSH_PASS: ${{ secrets.SSH_PASSWORD }}
+        run: |
+          echo "🔄 Tentative de redémarrage via Docker..."
+          sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no \
+            ${{ env.SSH_USER }}@${{ env.SSH_HOST }} \
+            "CONTAINER_ID=\$(docker ps --format '{{.ID}} {{.Mounts}}' | grep '8e4cb01d' | awk '{print \$1}' | head -1) && \
+             if [ -n \"\$CONTAINER_ID\" ]; then \
+               docker exec \$CONTAINER_ID pkill -f 'node' 2>/dev/null || true; \
+               echo '✅ Processus node arrêté (watchdog va relancer)'; \
+             else \
+               echo '⚠️ Conteneur non trouvé, vérifiez manuellement'; \
+             fi"
+
   # =============================================
-  # JOB 2 : CRÉATION DE LA RELEASE
+  # JOB 2 : RELEASE
   # =============================================
   release_and_notify:
     name: 📦 Create Release
@@ -190,7 +158,6 @@ jobs:
     if: needs.deploy.result == 'success'
     outputs:
       new_tag: ${{ steps.tag_version.outputs.new_tag }}
-      previous_tag: ${{ steps.tag_version.outputs.previous_tag }}
 
     steps:
       - name: Checkout code
@@ -218,7 +185,6 @@ jobs:
             LOG=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%h)" --reverse)
           fi
           
-          # Si pas de commits, message par défaut
           if [ -z "$LOG" ]; then
             LOG="- Mise à jour automatique"
           fi
@@ -246,10 +212,6 @@ jobs:
             
             ### 📋 Changelog
             ${{ steps.changelog.outputs.changelog }}
-            
-            ### 🎯 Cible
-            - **Volume:** `8e4cb01d-97ad-42f7-a9c8-9e21c859d26b`
-            - **Panel:** https://panel.orinstone.deepstone.fr
             
             ---
             *Déploiement automatique via GitHub Actions*

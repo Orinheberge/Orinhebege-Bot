@@ -42,41 +42,43 @@
         <p class="text-center text-gray-500 text-sm mt-6">&copy; 2026 Orinstone Network</p>
     </div>
 
-    <script>
-        document.getElementById('loginForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const password = document.getElementById('password').value;
-            const btn = document.getElementById('submitBtn');
-            const errorDiv = document.getElementById('error');
+<script>
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const password = document.getElementById('password').value;
+        const btn = document.getElementById('submitBtn');
+        const errorDiv = document.getElementById('error');
 
-            btn.disabled = true;
-            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Connexion...';
-            errorDiv.classList.add('hidden');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Connexion...';
+        errorDiv.classList.add('hidden');
 
-            try {
-                const res = await fetch('/api/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password })
-                });
-                const data = await res.json();
+        try {
+            const res = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password }),
+                credentials: 'include' // ✅ Important pour recevoir le cookie
+            });
+            const data = await res.json();
 
-                if (data.success) {
-                    localStorage.setItem('panelToken', data.token);
-                    // ✅ Redirection vers dashboard avec token
-                    window.location.href = '/?token=' + encodeURIComponent(data.token);
-                } else {
-                    errorDiv.textContent = data.error || 'Erreur inconnue';
-                    errorDiv.classList.remove('hidden');
-                }
-            } catch (err) {
-                errorDiv.textContent = 'Impossible de contacter le serveur.';
+            if (data.success) {
+                // ✅ Stocker aussi en localStorage pour compatibilité
+                localStorage.setItem('panelToken', data.token);
+                // Redirection vers dashboard
+                window.location.href = '/';
+            } else {
+                errorDiv.textContent = data.error || 'Mot de passe incorrect';
                 errorDiv.classList.remove('hidden');
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> Se connecter';
             }
-        });
-    </script>
+        } catch (err) {
+            errorDiv.textContent = 'Impossible de contacter le serveur.';
+            errorDiv.classList.remove('hidden');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> Se connecter';
+        }
+    });
+</script>
 </body>
 </html>
