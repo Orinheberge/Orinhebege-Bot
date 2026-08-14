@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AutoMod - Orinstone Panel</title>
+    <link rel="shortcut icon" href="https://heberge.deepstone.fr/favicon.ico" type="image/x-icon">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/assets/css/style.css">
+</head>
+<body class="text-white">
+    <div id="notification" class="hidden fixed top-20 right-6 z-50 px-6 py-3 rounded-lg shadow-lg text-white"></div>
+
+    <!-- Navbar -->
+    <nav class="glass sticky top-0 z-40 px-6 py-4 flex justify-between items-center">
+        <div class="flex items-center gap-3">
+            <i class="fa-solid fa-cube text-purple-400 text-2xl"></i>
+            <span class="font-bold text-xl hidden sm:inline">Orinstone Panel</span>
+        </div>
+        <div class="flex gap-4 items-center text-sm">
+            <a href="/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-house mr-1"></i> Accueil</a>
+            <a href="/features/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-sliders mr-1"></i> Features</a>
+            <a href="/automod/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-shield-halved mr-1"></i> AutoMod</a>
+            <a href="/status/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-signal mr-1"></i> Statuts</a>
+            <a href="/config/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-gear mr-1"></i> Config</a>
+            <button onclick="logout()" class="bg-red-500/80 hover:bg-red-600 px-4 py-2 rounded-lg transition text-xs font-medium"><i class="fa-solid fa-right-from-bracket"></i></button>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-6 py-8">
+        <!-- Header + Toggle Global -->
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 fade-in gap-4">
+            <div>
+                <h1 class="text-4xl font-bold mb-2"><i class="fa-solid fa-shield-halved text-red-400 mr-2"></i>AutoMod</h1>
+                <p class="text-gray-400">Configurez la modération automatique du serveur</p>
+            </div>
+            <div class="flex items-center gap-3 glass rounded-xl px-5 py-3">
+                <span class="font-semibold" id="globalStatus">Chargement...</span>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="globalToggle" class="sr-only peer">
+                    <div class="toggle-label relative w-14 h-7 bg-gray-600 rounded-full peer-checked:bg-green-500 transition">
+                        <div class="toggle-dot absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition"></div>
+                    </div>
+                </label>
+            </div>
+        </div>
+
+        <!-- Filtres -->
+        <div id="filtersContainer" class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div class="col-span-full text-center py-12 text-gray-400">
+                <i class="fa-solid fa-spinner fa-spin text-2xl mb-3"></i> Chargement...
+            </div>
+        </div>
+
+        <!-- Exemptions -->
+        <div class="glass rounded-xl p-8 fade-in">
+            <h2 class="text-2xl font-bold mb-6"><i class="fa-solid fa-user-shield text-blue-400 mr-2"></i>Exemptions</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">IDs Rôles exemptés (séparés par des virgules)</label>
+                    <textarea id="exemptRoles" rows="3" class="w-full px-4 py-3 bg-slate-800 border border-slate-600 rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none font-mono text-sm" placeholder="123456789, 987654321"></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">IDs Salons exemptés (séparés par des virgules)</label>
+                    <textarea id="exemptChannels" rows="3" class="w-full px-4 py-3 bg-slate-800 border border-slate-600 rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none font-mono text-sm" placeholder="123456789, 987654321"></textarea>
+                </div>
+            </div>
+            <button onclick="saveExemptions()" class="mt-4 bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded-lg transition font-medium">
+                <i class="fa-solid fa-save mr-1"></i> Sauvegarder les exemptions
+            </button>
+        </div>
+    </div>
+
+    <footer class="glass mt-12 py-6 text-center text-gray-500 text-sm">&copy; 2026 Orinstone Network</footer>
+
+    <script src="/assets/js/script.js"></script>
+    <script>
+        const FILTERS_CONFIG = [
+            { key: 'badWords', name: 'Mots Interdits', icon: 'fa-comment-slash', color: 'red',
+              fields: [
+                  { key: 'enabled', label: 'Activé', type: 'toggle' },
+                  { key: 'words', label: 'Mots (séparés par virgule)', type: 'textarea' },
+                  { key: 'action', label: 'Action', type: 'select', options: ['delete', 'warn', 'mute'] },
+                  { key: 'notifyUser', label: 'Notifier l\'utilisateur', type: 'toggle' }
+              ]},
+            { key: 'links', name: 'Liens Externes', icon: 'fa-link-slash', color: 'orange',
+              fields: [
+                  { key: 'enabled', label: 'Activé', type: 'toggle' },
+                  { key: 'whitelist', label: 'Domaines autorisés (virgule)', type: 'textarea' },
+                  { key: 'action', label: 'Action', type: 'select', options: ['delete', 'warn', 'mute'] },
+                  { key: 'notifyUser', label: 'Notifier l\'utilisateur', type: 'toggle' }
+              ]},
+            { key: 'invites', name: 'Invitations Discord', icon: 'fa-envelope-open-text', color: 'yellow',
+              fields: [
+                  { key: 'enabled', label: 'Activé', type: 'toggle' },
+                  { key: 'action', label: 'Action', type: 'select', options: ['delete', 'warn', 'mute'] },
+                  { key: 'notifyUser', label: 'Notifier l\'utilisateur', type: 'toggle' }
+              ]},
+            { key: 'caps', name: 'Abus de Majuscules', icon: 'fa-font', color: 'purple',
+              fields: [
+                  { key: 'enabled', label: 'Activé', type: 'toggle' },
+                  { key: 'minChars', label: 'Min caractères', type: 'number' },
+                  { key: 'maxPercent', label: '% Max majuscules', type: 'number' },
+                  { key: 'action', label: 'Action', type: 'select', options: ['delete', 'warn', 'mute'] },
+                  { key: 'notifyUser', label: 'Notifier l\'utilisateur', type: 'toggle' }
+              ]},
+            { key: 'spam', name: 'Anti-Spam', icon: 'fa-ban', color: 'indigo',
+              fields: [
+                  { key: 'enabled', label: 'Activé', type: 'toggle' },
+                  { key: 'maxMessages', label: 'Messages max', type: 'number' },
+                  { key: 'timeWindow', label: 'Fenêtre (ms)', type: 'number' },
+                  { key: 'action', label: 'Action', type: 'select', options: ['delete', 'warn', 'mute'] },
+                  { key: 'muteDuration', label: 'Durée mute (ms)', type: 'number' },
+                  { key: 'notifyUser', label: 'Notifier l\'utilisateur', type: 'toggle' }
+              ]},
+            { key: 'massMention', name: 'Mass Mention', icon: 'fa-at', color: 'pink',
+              fields: [
+                  { key: 'enabled', label: 'Activé', type: 'toggle' },
+                  { key: 'maxMentions', label: 'Mentions max', type: 'number' },
+                  { key: 'action', label: 'Action', type: 'select', options: ['delete', 'warn', 'mute'] },
+                  { key: 'notifyUser', label: 'Notifier l\'utilisateur', type: 'toggle' }
+              ]}
+        ];
+
+        let automodConfig = {};
+
+        async function loadAutomod() {
+            try {
+                const data = await Panel.api('/api/automod');
+                automodConfig = data.automod;
+
+                // Global toggle
+                document.getElementById('globalToggle').checked = automodConfig.enabled;
+                document.getElementById('globalStatus').textContent = automodConfig.enabled ? '✅ Activé' : '❌ Désactivé';
+                document.getElementById('globalStatus').className = `font-semibold ${automodConfig.enabled ? 'text-green-400' : 'text-red-400'}`;
+
+                // Exemptions
+                document.getElementById('exemptRoles').value = (automodConfig.exemptRoles || []).join(', ');
+                document.getElementById('exemptChannels').value = (automodConfig.exemptChannels || []).join(', ');
+
+                renderFilters();
+            } catch (e) {
+                document.getElementById('filtersContainer').innerHTML = '<p class="col-span-full text-red-400 text-center py-12">Erreur chargement.</p>';
+            }
+        }
+
+        function renderFilters() {
+            const container = document.getElementById('filtersContainer');
+            container.innerHTML = '';
+
+            FILTERS_CONFIG.forEach((f, i) => {
+                const cfg = automodConfig[f.key] || {};
+                const delayClass = `fade-in-delay-${Math.min(i % 3 + 1, 3)}`;
+
+                let fieldsHTML = '';
+                f.fields.forEach(field => {
+                    const val = cfg[field.key];
+                    if (field.type === 'toggle') {
+                        fieldsHTML += `
+                            <div class="flex items-center justify-between py-2">
+                                <label class="text-sm text-gray-300">${field.label}</label>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" class="sr-only peer filter-input" data-filter="${f.key}" data-key="${field.key}" ${val ? 'checked' : ''}>
+                                    <div class="toggle-label relative w-11 h-6 bg-gray-600 rounded-full peer-checked:bg-green-500 transition">
+                                        <div class="toggle-dot absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition"></div>
+                                    </div>
+                                </label>
+                            </div>`;
+                    } else if (field.type === 'textarea') {
+                        const arrVal = Array.isArray(val) ? val.join(', ') : (val || '');
+                        fieldsHTML += `
+                            <div class="py-2">
+                                <label class="block text-xs text-gray-400 mb-1">${field.label}</label>
+                                <textarea class="filter-input w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none" data-filter="${f.key}" data-key="${field.key}" data-type="array" rows="2">${arrVal}</textarea>
+                            </div>`;
+                    } else if (field.type === 'number') {
+                        fieldsHTML += `
+                            <div class="py-2">
+                                <label class="block text-xs text-gray-400 mb-1">${field.label}</label>
+                                <input type="number" class="filter-input w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none" data-filter="${f.key}" data-key="${field.key}" data-type="number" value="${val ?? ''}">
+                            </div>`;
+                    } else if (field.type === 'select') {
+                        const opts = field.options.map(o => `<option value="${o}" ${val === o ? 'selected' : ''}>${o.toUpperCase()}</option>`).join('');
+                        fieldsHTML += `
+                            <div class="py-2">
+                                <label class="block text-xs text-gray-400 mb-1">${field.label}</label>
+                                <select class="filter-input w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none" data-filter="${f.key}" data-key="${field.key}">${opts}</select>
+                            </div>`;
+                    }
+                });
+
+                container.innerHTML += `
+                    <div class="glass rounded-xl p-6 card-hover fade-in ${delayClass}">
+                        <div class="flex items-center gap-3 mb-4">
+                            <div class="bg-${f.color}-500/20 p-3 rounded-lg"><i class="fa-solid ${f.icon} text-${f.color}-400 text-xl"></i></div>
+                            <h3 class="font-bold text-lg">${f.name}</h3>
+                        </div>
+                        <div class="space-y-1">${fieldsHTML}</div>
+                        <button onclick="saveFilter('${f.key}')" class="mt-4 w-full bg-${f.color}-600/80 hover:bg-${f.color}-600 py-2 rounded-lg transition text-sm font-medium">
+                            <i class="fa-solid fa-save mr-1"></i> Sauvegarder
+                        </button>
+                    </div>`;
+            });
+        }
+
+        // Global toggle
+        document.getElementById('globalToggle').addEventListener('change', async (e) => {
+            try {
+                await Panel.api('/api/automod/toggle', { method: 'POST', body: JSON.stringify({ enabled: e.target.checked }) });
+                const status = document.getElementById('globalStatus');
+                status.textContent = e.target.checked ? '✅ Activé' : '❌ Désactivé';
+                status.className = `font-semibold ${e.target.checked ? 'text-green-400' : 'text-red-400'}`;
+                Panel.notify(e.target.checked ? 'AutoMod activé !' : 'AutoMod désactivé', e.target.checked ? 'success' : 'info');
+            } catch (err) { e.target.checked = !e.target.checked; Panel.notify('Erreur serveur', 'error'); }
+        });
+
+        // Save filter
+        async function saveFilter(filterKey) {
+            const inputs = document.querySelectorAll(`.filter-input[data-filter="${filterKey}"]`);
+            const settings = {};
+            inputs.forEach(input => {
+                const key = input.dataset.key;
+                if (input.type === 'checkbox') settings[key] = input.checked;
+                else if (input.dataset.type === 'number') settings[key] = parseInt(input.value) || 0;
+                else if (input.dataset.type === 'array') settings[key] = input.value.split(',').map(s => s.trim()).filter(Boolean);
+                else settings[key] = input.value;
+            });
+
+            try {
+                await Panel.api('/api/automod/filter', { method: 'POST', body: JSON.stringify({ filter: filterKey, settings }) });
+                Panel.notify(`Filtre "${filterKey}" sauvegardé !`, 'success');
+            } catch (err) { Panel.notify('Erreur sauvegarde', 'error'); }
+        }
+
+        // Save exemptions
+        async function saveExemptions() {
+            const roles = document.getElementById('exemptRoles').value.split(',').map(s => s.trim()).filter(Boolean);
+            const channels = document.getElementById('exemptChannels').value.split(',').map(s => s.trim()).filter(Boolean);
+            try {
+                await Panel.api('/api/automod/exemptions', { method: 'POST', body: JSON.stringify({ exemptRoles: roles, exemptChannels: channels }) });
+                Panel.notify('Exemptions sauvegardées !', 'success');
+            } catch (err) { Panel.notify('Erreur sauvegarde', 'error'); }
+        }
+
+        loadAutomod();
+    </script>
+</body>
+</html>

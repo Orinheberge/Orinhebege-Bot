@@ -29,7 +29,53 @@ const defaultData = {
         botStatusRotation: true,
         levelUpNotifications: true,
         reactionReglement: true
-    }
+    },
+    // Dans defaultData, ajoutez :
+    automod: {
+    enabled: false,
+    // Filtres
+    badWords: {
+        enabled: true,
+        words: ["pute", "fdp", "ntm", "enculé", "salope", "connard", "merde", "tg", "ftg"],
+        action: "delete",       // delete | warn | mute
+        notifyUser: true
+    },
+    links: {
+        enabled: true,
+        whitelist: ["discord.gg", "orinstone.deepstone.fr", "youtube.com", "youtu.be", "twitch.tv"],
+        action: "delete",
+        notifyUser: true
+    },
+    invites: {
+        enabled: true,
+        action: "delete",
+        notifyUser: true
+    },
+    caps: {
+        enabled: false,
+        minChars: 10,           // Nombre min de caractères avant vérification
+        maxPercent: 70,         // % max de majuscules autorisé
+        action: "delete",
+        notifyUser: true
+    },
+    spam: {
+        enabled: true,
+        maxMessages: 5,         // Messages max dans la fenêtre
+        timeWindow: 3000,       // Fenêtre en ms
+        action: "mute",
+        muteDuration: 600000,   // Durée mute en ms (10min)
+        notifyUser: true
+    },
+    massMention: {
+        enabled: true,
+        maxMentions: 5,
+        action: "delete",
+        notifyUser: true
+    },
+    // Exemptions
+    exemptRoles: [],            // IDs des rôles exemptés
+    exemptChannels: []          // IDs des salons exemptés
+}
 };
 
 class Database {
@@ -45,6 +91,26 @@ class Database {
         }
         return { ...defaultData };
     }
+
+    static getAutomod() {
+    const data = this.load();
+    return data.automod || defaultData.automod;
+}
+
+static setAutomod(key, value) {
+    const data = this.load();
+    if (!data.automod) data.automod = { ...defaultData.automod };
+
+    // Support des clés imbriquées ex: "badWords.enabled"
+    if (key.includes('.')) {
+        const [cat, prop] = key.split('.');
+        if (!data.automod[cat]) data.automod[cat] = {};
+        data.automod[cat][prop] = value;
+    } else {
+        data.automod[key] = value;
+    }
+    return this.save(data);
+}
 
     static save(data) {
         try {

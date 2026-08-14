@@ -54,12 +54,53 @@ function startWebServer(client) {
         res.json({ success: true, config: Database.load() });
     });
 
+ // === GET Automod Config ===
+app.get('/api/automod', authApi, (req, res) => {
+    res.json({ success: true, automod: Database.getAutomod() });
+});
+
+// === POST Toggle Global ===
+app.post('/api/automod/toggle', authApi, (req, res) => {
+    const { enabled } = req.body;
+    Database.setAutomod('enabled', !!enabled);
+    res.json({ success: true, enabled: !!enabled });
+});
+
+// === POST Update Filter ===
+app.post('/api/automod/filter', authApi, (req, res) => {
+    const { filter, settings } = req.body;
+    if (!filter || !settings) return res.status(400).json({ success: false, error: 'Paramètres manquants' });
+
+    const current = Database.getAutomod();
+    if (!current[filter]) return res.status(400).json({ success: false, error: 'Filtre inconnu' });
+
+    // Merge sécurisé
+    for (const [key, value] of Object.entries(settings)) {
+        if (key in current[filter]) {
+            Database.setAutomod(`${filter}.${key}`, value);
+        }
+    }
+
+    console.log(`[PANEL] AutoMod filter "${filter}" updated`);
+    res.json({ success: true, filter, settings });
+});
+
+// === POST Update Exemptions ===
+app.post('/api/automod/exemptions', authApi, (req, res) => {
+    const { exemptRoles, exemptChannels } = req.body;
+    if (exemptRoles) Database.setAutomod('exemptRoles', exemptRoles);
+    if (exemptChannels) Database.setAutomod('exemptChannels', exemptChannels);
+    res.json({ success: true });
+});
+
     // --- PAGE ROUTES ---
     app.get('/', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'index.html')));
     app.get('/features/', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', '/features/index.html')));
     app.get('/status/', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', '/status/index.html')));
     app.get('/config/', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', '/config/index.html')));
     app.get('/about/', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', '/about/index.html')));
+    app.get('/automod/', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', '/automod/index.html')));
+
 
     app.listen(WEB_PORT, '0.0.0.0', () => {
         console.log(`🌐 Panel web démarré sur https://orinhebergebot.deepstone.fr/`);

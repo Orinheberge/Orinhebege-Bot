@@ -1,10 +1,10 @@
 const { REST, Routes } = require('discord.js');
-const fs = require('fs');
-const path = require('path');
 const config = require('../../config.json');
 const LevelDB = require('../../managers/LevelDB');
 const StatusChecker = require('../../managers/StatusChecker');
+const AutoMod = require('../../managers/AutoMod');
 const Logger = require('../../utils/logger');
+const Database = require('../../managers/Database');
 
 module.exports = {
     name: 'clientReady',
@@ -13,27 +13,33 @@ module.exports = {
         console.log(`✅ Bot connecté en tant que ${client.user.tag}`);
 
         // === Enregistrement des Slash Commands ===
-        const commands = [];
-        const loadCommands = (dir) => {
-            const items = fs.readdirSync(dir, { withFileTypes: true });
-            for (const item of items) {
-                const fullPath = path.join(dir, item.name);
-                if (item.isDirectory()) loadCommands(fullPath);
-                else if (item.name.endsWith('.js')) {
-                    const cmd = require(fullPath);
-                    if (cmd.data) commands.push(cmd.data.toJSON());
-                }
+        // ✅ Utilise client.commands DÉJÀ rempli par server.js (pas de rechargement disque)
+        const commands = Array.from(client.commands.values())
+            .map(cmd => cmd.data.toJSON());
+
+        // ✅ Détection de doublons AVANT envoi à Discord
+        const seen = new Set();
+        const uniqueCommands = [];
+        for (const cmd of commands) {
+            if (seen.has(cmd.name)) {
+                console.error(`🔴 DOUBLON COMMANDÉ DÉTECTÉ ET IGNORÉ: "${cmd.name}"`);
+                continue;
             }
-        };
-        loadCommands(path.join(__dirname, '../../commands'));
+            seen.add(cmd.name);
+            uniqueCommands.push(cmd);
+        }
+
+        if (uniqueCommands.length !== commands.length) {
+            console.warn(`⚠️  ${commands.length - uniqueCommands.length} commande(s) dupliquée(s) ignorée(s)`);
+        }
 
         try {
             const rest = new REST({ version: '10' }).setToken(config.token);
             await rest.put(
                 Routes.applicationGuildCommands(config.clientId, config.guildId),
-                { body: commands }
+                { body: uniqueCommands }
             );
-            console.log(`✅ ${commands.length} slash commands enregistrées`);
+            console.log(`✅ ${uniqueCommands.length} slash commands enregistrées`);
         } catch (error) {
             console.error('❌ Erreur enregistrement commandes:', error);
         }
@@ -41,6 +47,7 @@ module.exports = {
         // === Démarrage des systèmes périodiques ===
         LevelDB.startVoiceXPSystem(client);
         StatusChecker.startStatusInterval(client);
+        AutoMod.startCacheCleanup();
 
         // === Rotation du statut bot ===
         const botStatuses = [
@@ -55,7 +62,6 @@ module.exports = {
 
         let statusIndex = 0;
         const updateStatus = async () => {
-            const Database = require('../../managers/Database');
             if (!client.isReady() || !Database.isFeatureEnabled('botStatusRotation')) return;
             try {
                 const s = botStatuses[statusIndex];
@@ -67,6 +73,7 @@ module.exports = {
                 statusIndex = (statusIndex + 1) % botStatuses.length;
             } catch (e) { /* silencieux */ }
         };
+
         updateStatus();
         setInterval(updateStatus, 15 * 60 * 1000);
 

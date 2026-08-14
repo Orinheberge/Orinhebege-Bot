@@ -2,6 +2,7 @@ const Database = require('../../managers/Database');
 const LevelDB = require('../../managers/LevelDB');
 const Logger = require('../../utils/logger');
 const config = require('../../config.json');
+const AutoMod = require('../../managers/AutoMod');
 
 // Cache mémoire pour les cooldowns XP (évite de lire/écrire le JSON à chaque message)
 const messageCooldowns = new Map();
@@ -11,6 +12,10 @@ module.exports = {
     async execute(message, client) {
         // Ignorer les bots et les DMs
         if (message.author.bot || !message.guild) return;
+
+                // ✅ AUTOMOD - Vérification prioritaire
+        const blocked = await AutoMod.check(message);
+        if (blocked) return; // Message supprimé/sanctionné, on stoppe tout
 
         // =============================================
         // 1. SYSTÈME D'XP PAR MESSAGE
