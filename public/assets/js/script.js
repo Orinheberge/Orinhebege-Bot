@@ -48,7 +48,7 @@ const Panel = {
      */
     logout() {
         localStorage.removeItem('panelToken');
-        window.location.href = '/login.html';
+        window.location.href = '/login/';
     },
 
     /**

@@ -7,7 +7,7 @@ const StatusChecker = require('../../managers/StatusChecker');
 const Logger = require('../../utils/logger');
 
 module.exports = {
-    name: 'ready',
+    name: 'clientReady',
     once: true,
     async execute(client) {
         console.log(`✅ Bot connecté en tant que ${client.user.tag}`);

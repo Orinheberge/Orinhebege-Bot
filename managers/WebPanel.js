@@ -28,7 +28,7 @@ function startWebServer(client) {
     const requireAuth = (req, res, next) => {
         const token = req.query.token;
         if (token === ADMIN_PASSWORD) return next();
-        return res.redirect('/login.html');
+        return res.redirect('/login/');
     };
 
     // --- API ROUTES ---
@@ -56,13 +56,13 @@ function startWebServer(client) {
 
     // --- PAGE ROUTES ---
     app.get('/', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'index.html')));
-    app.get('/features', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', '/features/index.html')));
-    app.get('/status', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', '/status/index.html')));
-    app.get('/config', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', '/config/index.html')));
-    app.get('/about', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', '/about/index.html')));
+    app.get('/features/', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', '/features/index.html')));
+    app.get('/status/', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', '/status/index.html')));
+    app.get('/config/', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', '/config/index.html')));
+    app.get('/about/', requireAuth, (req, res) => res.sendFile(path.join(__dirname, '..', 'public', '/about/index.html')));
 
     app.listen(WEB_PORT, '0.0.0.0', () => {
-        console.log(`🌐 Panel web démarré sur http://0.0.0.0:${WEB_PORT}`);
+        console.log(`🌐 Panel web démarré sur https://orinhebergebot.deepstone.fr/`);
     });
 }
 
