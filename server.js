@@ -1530,23 +1530,33 @@ client.on('messageReactionAdd', async (reaction, user) => {
 // ============================================================
 function startWebServer() {
     const app = express();
-    
+
     // Middlewares
     app.use(bodyParser.json());
     app.use(bodyParser.urlencoded({ extended: true }));
-    
-    // ===== AUTHENTIFICATION SIMPLE PAR MOT DE PASSE (à améliorer avec bcrypt plus tard) =====
-    // Le mot de passe admin sera stocké dans config.json sous "panelPassword"
-    const ADMIN_PASSWORD = config.panelPassword || "admin123"; // ⚠️ Change ça !
-    
-    function authMiddleware(req, res, next) {
-        // Vérification basique : le token est dans le header ou les cookies
+
+    const ADMIN_PASSWORD = config.panelPassword || "admin123";
+
+    // ===== MIDDLEWARE D'AUTHENTIFICATION UNIFIÉ =====
+    // Accepte : query string, header X-Panel-Token, OU cookie-like via localStorage injecté en JS
+    function requireAuth(req, res, next) {
+        const token = req.query.token || req.headers['x-panel-token'];
+        if (token === ADMIN_PASSWORD) return next();
+        // Pour les requêtes HTML sans token, on sert une page qui vérifie côté client
+        if (req.accepts('html')) {
+            return res.redirect('/login');
+        }
+        return res.status(401).json({ success: false, error: 'Non authentifié' });
+    }
+
+    // Middleware API uniquement
+    function authApi(req, res, next) {
         const token = req.headers['x-panel-token'] || req.query.token;
         if (token === ADMIN_PASSWORD) return next();
         return res.status(401).json({ success: false, error: 'Non authentifié' });
     }
-    
-    // ===== TEMPLATE HTML DE BASE (Tailwind + FontAwesome) =====
+
+    // ===== TEMPLATE HTML =====
     const htmlTemplate = (title, content, isLoggedIn = false) => `
 <!DOCTYPE html>
 <html lang="fr" class="dark">
@@ -1557,42 +1567,17 @@ function startWebServer() {
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
-            min-height: 100vh;
-        }
-        .glass {
-            background: rgba(30, 41, 59, 0.7);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        .toggle-checkbox:checked {
-            background-color: #10b981 !important;
-        }
-        .toggle-checkbox:checked + .toggle-label {
-            background-color: #10b981 !important;
-        }
-        .toggle-checkbox:checked + .toggle-label .toggle-dot {
-            transform: translateX(100%);
-            background-color: white;
-        }
-        .card-hover:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-        }
-        .card-hover {
-            transition: all 0.3s ease;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
+        body { font-family: 'Inter', sans-serif; background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); min-height: 100vh; }
+        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
+        .toggle-checkbox:checked + .toggle-label { background-color: #10b981 !important; }
+        .toggle-checkbox:checked + .toggle-label .toggle-dot { transform: translateX(100%); background-color: white; }
+        .card-hover:hover { transform: translateY(-4px); box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+        .card-hover { transition: all 0.3s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .fade-in { animation: fadeIn 0.4s ease-out; }
     </style>
 </head>
 <body class="text-white">
-    <!-- NAVBAR -->
     ${isLoggedIn ? `
     <nav class="glass sticky top-0 z-50 px-6 py-4 flex justify-between items-center">
         <div class="flex items-center gap-3">
@@ -1600,35 +1585,40 @@ function startWebServer() {
             <span class="font-bold text-xl">Orinstone Panel</span>
         </div>
         <div class="flex gap-4 items-center">
-            <a href="/" class="text-gray-300 hover:text-white transition"><i class="fa-solid fa-house"></i> Accueil</a>
-            <a href="/features" class="text-gray-300 hover:text-white transition"><i class="fa-solid fa-sliders"></i> Fonctionnalités</a>
-            <a href="/status" class="text-gray-300 hover:text-white transition"><i class="fa-solid fa-signal"></i> Statuts</a>
-            <a href="/about" class="text-gray-300 hover:text-white transition"><i class="fa-solid fa-circle-info"></i> À propos</a>
+            <a href="/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-house"></i> Accueil</a>
+            <a href="/features" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-sliders"></i> Fonctionnalités</a>
+            <a href="/status" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-signal"></i> Statuts</a>
+            <a href="/about" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-circle-info"></i> À propos</a>
             <button onclick="logout()" class="bg-red-500 hover:bg-red-600 px-4 py-2 rounded-lg transition">
                 <i class="fa-solid fa-right-from-bracket"></i> Déconnexion
             </button>
         </div>
     </nav>
     ` : ''}
-    
-    <div class="container mx-auto px-6 py-8 fade-in">
-        ${content}
-    </div>
-    
+    <div class="container mx-auto px-6 py-8 fade-in">${content}</div>
     <footer class="glass mt-12 py-6 text-center text-gray-400">
         <p>&copy; 2026 Orinstone Network - Panel de gestion du bot Discord</p>
     </footer>
-    
+    ${isLoggedIn ? `
     <script>
+        // ✅ INJECTION AUTOMATIQUE DU TOKEN DANS TOUS LES LIENS NAV
+        (function() {
+            const token = localStorage.getItem('panelToken');
+            if (!token) { window.location.href = '/login'; return; }
+            document.querySelectorAll('.nav-link').forEach(link => {
+                const url = new URL(link.href, window.location.origin);
+                url.searchParams.set('token', token);
+                link.href = url.toString();
+            });
+        })();
         function logout() {
             localStorage.removeItem('panelToken');
             window.location.href = '/login';
         }
-    </script>
+    </script>` : ''}
 </body>
-</html>
-    `;
-    
+</html>`;
+
     // ===== PAGE DE CONNEXION =====
     app.get('/login', (req, res) => {
         const content = `
@@ -1665,7 +1655,8 @@ function startWebServer() {
                         const data = await res.json();
                         if (data.success) {
                             localStorage.setItem('panelToken', data.token);
-                            window.location.href = '/';
+                            // ✅ Redirection AVEC le token dans l'URL
+                            window.location.href = '/?token=' + encodeURIComponent(data.token);
                         } else {
                             const err = document.getElementById('error');
                             err.textContent = data.error;
@@ -1675,11 +1666,10 @@ function startWebServer() {
                         console.error(err);
                     }
                 });
-            </script>
-        `;
+            </script>`;
         res.send(htmlTemplate('Connexion', content));
     });
-    
+
     // ===== API LOGIN =====
     app.post('/api/login', (req, res) => {
         const { password } = req.body;
@@ -1688,112 +1678,76 @@ function startWebServer() {
         }
         return res.status(401).json({ success: false, error: 'Mot de passe incorrect' });
     });
-    
-    // ===== PAGE D'ACCUEIL (DASHBOARD) =====
-    app.get('/', (req, res) => {
-        const token = req.query.token || '';
-        if (token !== ADMIN_PASSWORD) return res.redirect('/login');
-        
+
+    // ===== DASHBOARD =====
+    app.get('/', requireAuth, (req, res) => {
+        const token = req.query.token;
         const dbData = Database.load();
         const features = dbData.features || {};
         const enabledCount = Object.values(features).filter(v => v).length;
         const totalCount = Object.keys(features).length;
-        
+
         const content = `
             <div class="mb-8">
-                <h1 class="text-4xl font-bold mb-2">
-                    <i class="fa-solid fa-gauge-high text-purple-400"></i> Dashboard
-                </h1>
+                <h1 class="text-4xl font-bold mb-2"><i class="fa-solid fa-gauge-high text-purple-400"></i> Dashboard</h1>
                 <p class="text-gray-400">Vue d'ensemble de votre bot Discord Orinstone</p>
             </div>
-            
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                 <div class="glass rounded-xl p-6 card-hover">
                     <div class="flex items-center gap-4">
-                        <div class="bg-green-500/20 p-4 rounded-xl">
-                            <i class="fa-solid fa-circle-check text-green-400 text-2xl"></i>
-                        </div>
-                        <div>
-                            <p class="text-gray-400 text-sm">Fonctionnalités actives</p>
-                            <p class="text-3xl font-bold">${enabledCount} / ${totalCount}</p>
-                        </div>
+                        <div class="bg-green-500/20 p-4 rounded-xl"><i class="fa-solid fa-circle-check text-green-400 text-2xl"></i></div>
+                        <div><p class="text-gray-400 text-sm">Fonctionnalités actives</p><p class="text-3xl font-bold">${enabledCount} / ${totalCount}</p></div>
                     </div>
                 </div>
-                
                 <div class="glass rounded-xl p-6 card-hover">
                     <div class="flex items-center gap-4">
-                        <div class="bg-blue-500/20 p-4 rounded-xl">
-                            <i class="fa-solid fa-server text-blue-400 text-2xl"></i>
-                        </div>
-                        <div>
-                            <p class="text-gray-400 text-sm">Statut du bot</p>
-                            <p class="text-3xl font-bold text-green-400">En ligne</p>
-                        </div>
+                        <div class="bg-blue-500/20 p-4 rounded-xl"><i class="fa-solid fa-server text-blue-400 text-2xl"></i></div>
+                        <div><p class="text-gray-400 text-sm">Statut du bot</p><p class="text-3xl font-bold text-green-400">En ligne</p></div>
                     </div>
                 </div>
-                
                 <div class="glass rounded-xl p-6 card-hover">
                     <div class="flex items-center gap-4">
-                        <div class="bg-purple-500/20 p-4 rounded-xl">
-                            <i class="fa-solid fa-clock text-purple-400 text-2xl"></i>
-                        </div>
-                        <div>
-                            <p class="text-gray-400 text-sm">Port du panel</p>
-                            <p class="text-3xl font-bold">${WEB_PORT}</p>
-                        </div>
+                        <div class="bg-purple-500/20 p-4 rounded-xl"><i class="fa-solid fa-clock text-purple-400 text-2xl"></i></div>
+                        <div><p class="text-gray-400 text-sm">Port du panel</p><p class="text-3xl font-bold">${WEB_PORT}</p></div>
                     </div>
                 </div>
             </div>
-            
-            <div class="glass rounded-xl p-8 mb-8">
+            <div class="glass rounded-xl p-8">
                 <h2 class="text-2xl font-bold mb-4"><i class="fa-solid fa-bolt text-yellow-400"></i> Accès rapides</h2>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <a href="/features?token=${token}" class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 p-6 rounded-xl transition card-hover">
-                        <i class="fa-solid fa-sliders text-3xl mb-2"></i>
-                        <h3 class="text-xl font-bold">Gérer les fonctionnalités</h3>
-                        <p class="text-gray-200 text-sm mt-1">Activez ou désactivez les systèmes du bot</p>
+                        <i class="fa-solid fa-sliders text-3xl mb-2"></i><h3 class="text-xl font-bold">Gérer les fonctionnalités</h3>
                     </a>
                     <a href="/status?token=${token}" class="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 p-6 rounded-xl transition card-hover">
-                        <i class="fa-solid fa-signal text-3xl mb-2"></i>
-                        <h3 class="text-xl font-bold">Statuts des services</h3>
-                        <p class="text-gray-200 text-sm mt-1">Vérifiez l'état de vos serveurs</p>
+                        <i class="fa-solid fa-signal text-3xl mb-2"></i><h3 class="text-xl font-bold">Statuts des services</h3>
                     </a>
                     <a href="/config?token=${token}" class="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 p-6 rounded-xl transition card-hover">
-                        <i class="fa-solid fa-gear text-3xl mb-2"></i>
-                        <h3 class="text-xl font-bold">Configuration</h3>
-                        <p class="text-gray-200 text-sm mt-1">Voir les paramètres actuels</p>
+                        <i class="fa-solid fa-gear text-3xl mb-2"></i><h3 class="text-xl font-bold">Configuration</h3>
                     </a>
                     <a href="/about?token=${token}" class="bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 p-6 rounded-xl transition card-hover">
-                        <i class="fa-solid fa-circle-info text-3xl mb-2"></i>
-                        <h3 class="text-xl font-bold">À propos</h3>
-                        <p class="text-gray-200 text-sm mt-1">Informations sur le bot</p>
+                        <i class="fa-solid fa-circle-info text-3xl mb-2"></i><h3 class="text-xl font-bold">À propos</h3>
                     </a>
                 </div>
-            </div>
-        `;
+            </div>`;
         res.send(htmlTemplate('Dashboard', content, true));
     });
-    
-    // ===== PAGE DES FONCTIONNALITÉS (ACTIVER/DÉSACTIVER) =====
-    app.get('/features', (req, res) => {
-        const token = req.query.token || '';
-        if (token !== ADMIN_PASSWORD) return res.redirect('/login');
-        
+
+    // ===== FONCTIONNALITÉS =====
+    app.get('/features', requireAuth, (req, res) => {
         const features = Database.get('features') || {};
-        
         const featuresList = [
             { key: 'xpMessages', name: 'XP Messages', icon: 'fa-message', desc: 'Attribution d\'XP lors de l\'envoi de messages', color: 'blue' },
             { key: 'xpVoice', name: 'XP Vocal', icon: 'fa-microphone', desc: 'Attribution d\'XP toutes les minutes en vocal', color: 'green' },
             { key: 'welcomeMessages', name: 'Messages de bienvenue', icon: 'fa-hand-wave', desc: 'Envoi d\'un message à l\'arrivée des nouveaux membres', color: 'emerald' },
             { key: 'leaveMessages', name: 'Messages de départ', icon: 'fa-door-open', desc: 'Envoi d\'un message quand un membre quitte', color: 'orange' },
-            { key: 'logs', name: 'Logs du serveur', icon: 'fa-file-lines', desc: 'Enregistrement des événements (messages, rôles, etc.)', color: 'purple' },
-            { key: 'tickets', name: 'Système de tickets', icon: 'fa-ticket', desc: 'Permettre la création de tickets de support', color: 'indigo' },
+            { key: 'logs', name: 'Logs du serveur', icon: 'fa-file-lines', desc: 'Enregistrement des événements', color: 'purple' },
+            { key: 'tickets', name: 'Système de tickets', icon: 'fa-ticket', desc: 'Création de tickets de support', color: 'indigo' },
             { key: 'statusServices', name: 'Statut des services', icon: 'fa-signal', desc: 'Affichage du statut des services hébergés', color: 'cyan' },
             { key: 'botStatusRotation', name: 'Rotation du statut', icon: 'fa-rotate', desc: 'Changement automatique du statut du bot', color: 'pink' },
             { key: 'levelUpNotifications', name: 'Notifications Level Up', icon: 'fa-arrow-up', desc: 'Annonce quand un membre monte de niveau', color: 'yellow' },
             { key: 'reactionReglement', name: 'Réaction Règlement', icon: 'fa-scroll', desc: 'Logs des réactions sur le règlement', color: 'amber' }
         ];
-        
+
         let cardsHTML = '';
         featuresList.forEach(f => {
             const isEnabled = features[f.key] !== false;
@@ -1801,9 +1755,7 @@ function startWebServer() {
                 <div class="glass rounded-xl p-6 card-hover">
                     <div class="flex items-start justify-between">
                         <div class="flex items-start gap-4 flex-1">
-                            <div class="bg-${f.color}-500/20 p-3 rounded-lg">
-                                <i class="fa-solid ${f.icon} text-${f.color}-400 text-xl"></i>
-                            </div>
+                            <div class="bg-${f.color}-500/20 p-3 rounded-lg"><i class="fa-solid ${f.icon} text-${f.color}-400 text-xl"></i></div>
                             <div class="flex-1">
                                 <h3 class="font-bold text-lg">${f.name}</h3>
                                 <p class="text-gray-400 text-sm mt-1">${f.desc}</p>
@@ -1819,76 +1771,55 @@ function startWebServer() {
                             </div>
                         </label>
                     </div>
-                </div>
-            `;
+                </div>`;
         });
-        
+
         const content = `
             <div class="mb-8">
-                <h1 class="text-4xl font-bold mb-2">
-                    <i class="fa-solid fa-sliders text-purple-400"></i> Fonctionnalités
-                </h1>
+                <h1 class="text-4xl font-bold mb-2"><i class="fa-solid fa-sliders text-purple-400"></i> Fonctionnalités</h1>
                 <p class="text-gray-400">Activez ou désactivez les différentes fonctionnalités du bot</p>
             </div>
-            
             <div id="notification" class="hidden fixed top-20 right-6 z-50 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg"></div>
-            
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                ${cardsHTML}
-            </div>
-            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">${cardsHTML}</div>
             <script>
                 document.querySelectorAll('.toggle-checkbox').forEach(toggle => {
                     toggle.addEventListener('change', async (e) => {
                         const feature = e.target.dataset.feature;
                         const enabled = e.target.checked;
                         const status = document.getElementById('status-' + feature);
-                        
                         try {
                             const res = await fetch('/api/feature', {
                                 method: 'POST',
-                                headers: { 
-                                    'Content-Type': 'application/json',
-                                    'X-Panel-Token': localStorage.getItem('panelToken')
-                                },
+                                headers: { 'Content-Type': 'application/json', 'X-Panel-Token': localStorage.getItem('panelToken') },
                                 body: JSON.stringify({ feature, enabled })
                             });
                             const data = await res.json();
-                            
                             if (data.success) {
                                 const notif = document.getElementById('notification');
                                 notif.textContent = enabled ? '✅ Fonctionnalité activée !' : '❌ Fonctionnalité désactivée';
-                                notif.classList.remove('hidden', 'bg-red-500');
-                                notif.classList.add('bg-green-500');
+                                notif.className = 'fixed top-20 right-6 z-50 text-white px-6 py-3 rounded-lg shadow-lg ' + (enabled ? 'bg-green-500' : 'bg-red-500');
                                 status.textContent = enabled ? '✓ Activé' : '✗ Désactivé';
-                                status.className = 'inline-block mt-2 px-2 py-1 text-xs rounded-full ' + 
-                                    (enabled ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300');
+                                status.className = 'inline-block mt-2 px-2 py-1 text-xs rounded-full ' + (enabled ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300');
                                 setTimeout(() => notif.classList.add('hidden'), 2000);
                             }
-                        } catch (err) {
-                            e.target.checked = !enabled;
-                        }
+                        } catch (err) { e.target.checked = !enabled; }
                     });
                 });
-            </script>
-        `;
+            </script>`;
         res.send(htmlTemplate('Fonctionnalités', content, true));
     });
-    
-    // ===== API : TOGGLE UNE FONCTIONNALITÉ =====
-    app.post('/api/feature', authMiddleware, (req, res) => {
+
+    // ===== API FEATURE TOGGLE =====
+    app.post('/api/feature', authApi, (req, res) => {
         const { feature, enabled } = req.body;
         if (!feature) return res.status(400).json({ success: false, error: 'Feature manquante' });
         Database.set(`features.${feature}`, !!enabled);
         console.log(`[PANEL] Feature ${feature} → ${enabled ? 'ON' : 'OFF'}`);
         res.json({ success: true, feature, enabled: !!enabled });
     });
-    
-    // ===== PAGE : STATUT DES SERVICES =====
-    app.get('/status', async (req, res) => {
-        const token = req.query.token || '';
-        if (token !== ADMIN_PASSWORD) return res.redirect('/login');
-        
+
+    // ===== STATUT DES SERVICES =====
+    app.get('/status', requireAuth, async (req, res) => {
         let servicesHTML = '';
         try {
             const statuses = await getAllStatus();
@@ -1904,40 +1835,25 @@ function startWebServer() {
                         <div class="space-y-1 text-sm">
                             <p><span class="text-gray-400">Statut :</span> <span class="text-${color}-400 font-semibold">${s.online ? 'En ligne' : 'Hors ligne'}</span></p>
                             ${s.responseTime ? `<p><span class="text-gray-400">Latence :</span> ${s.responseTime}ms</p>` : ''}
-                            ${s.statusCode ? `<p><span class="text-gray-400">Code HTTP :</span> ${s.statusCode}</p>` : ''}
                             ${s.url ? `<p><span class="text-gray-400">URL :</span> <a href="${s.url}" target="_blank" class="text-purple-400 hover:underline">${s.url}</a></p>` : ''}
-                            ${s.host ? `<p><span class="text-gray-400">Hôte :</span> ${s.host}${s.port ? ':' + s.port : ''}</p>` : ''}
                         </div>
-                    </div>
-                `;
+                    </div>`;
             });
-        } catch (e) {
-            servicesHTML = '<p class="text-red-400">Erreur lors du chargement des statuts.</p>';
-        }
-        
+        } catch (e) { servicesHTML = '<p class="text-red-400">Erreur lors du chargement des statuts.</p>'; }
+
         const content = `
-            <div class="mb-8">
-                <h1 class="text-4xl font-bold mb-2"><i class="fa-solid fa-signal text-green-400"></i> Statut des Services</h1>
-                <p class="text-gray-400">État en temps réel de vos services hébergés</p>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">${servicesHTML}</div>
-        `;
+            <div class="mb-8"><h1 class="text-4xl font-bold mb-2"><i class="fa-solid fa-signal text-green-400"></i> Statut des Services</h1>
+            <p class="text-gray-400">État en temps réel de vos services hébergés</p></div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">${servicesHTML}</div>`;
         res.send(htmlTemplate('Statuts', content, true));
     });
-    
-    // ===== PAGE : CONFIGURATION =====
-    app.get('/config', (req, res) => {
-        const token = req.query.token || '';
-        if (token !== ADMIN_PASSWORD) return res.redirect('/login');
-        
+
+    // ===== CONFIGURATION =====
+    app.get('/config', requireAuth, (req, res) => {
         const db = Database.load();
-        
         const content = `
-            <div class="mb-8">
-                <h1 class="text-4xl font-bold mb-2"><i class="fa-solid fa-gear text-blue-400"></i> Configuration</h1>
-                <p class="text-gray-400">Vue d'ensemble des paramètres du bot</p>
-            </div>
-            
+            <div class="mb-8"><h1 class="text-4xl font-bold mb-2"><i class="fa-solid fa-gear text-blue-400"></i> Configuration</h1>
+            <p class="text-gray-400">Vue d'ensemble des paramètres du bot</p></div>
             <div class="glass rounded-xl p-8 mb-6">
                 <h2 class="text-2xl font-bold mb-4">⚙️ XP & Niveaux</h2>
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1946,99 +1862,45 @@ function startWebServer() {
                     <div class="bg-slate-800 rounded-lg p-4"><p class="text-gray-400 text-sm">Cooldown</p><p class="text-2xl font-bold">${db.xpMessageCooldown || 60}s</p></div>
                     <div class="bg-slate-800 rounded-lg p-4"><p class="text-gray-400 text-sm">Niveau max</p><p class="text-2xl font-bold">${db.maxLevel || 5000}</p></div>
                 </div>
-            </div>
-            
-            <div class="glass rounded-xl p-8 mb-6">
-                <h2 class="text-2xl font-bold mb-4">📡 Salons configurés</h2>
-                <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    <div class="bg-slate-800 rounded-lg p-4"><p class="text-gray-400 text-sm">Transcripts</p><p class="font-mono text-sm">${db.transcriptChannel || '—'}</p></div>
-                    <div class="bg-slate-800 rounded-lg p-4"><p class="text-gray-400 text-sm">Bienvenue</p><p class="font-mono text-sm">${db.welcomeChannel || '—'}</p></div>
-                    <div class="bg-slate-800 rounded-lg p-4"><p class="text-gray-400 text-sm">Logs</p><p class="font-mono text-sm">${db.logsChannel || '—'}</p></div>
-                    <div class="bg-slate-800 rounded-lg p-4"><p class="text-gray-400 text-sm">Status</p><p class="font-mono text-sm">${db.statusChannel || '—'}</p></div>
-                    <div class="bg-slate-800 rounded-lg p-4"><p class="text-gray-400 text-sm">Level Up</p><p class="font-mono text-sm">${db.levelupChannel || '—'}</p></div>
-                    <div class="bg-slate-800 rounded-lg p-4"><p class="text-gray-400 text-sm">Tickets</p><p class="font-mono text-sm">${db.ticketCategory || '—'}</p></div>
-                </div>
-            </div>
-            
-            <div class="glass rounded-xl p-8">
-                <h2 class="text-2xl font-bold mb-4">🎭 Rôles</h2>
-                <div class="grid grid-cols-2 gap-4">
-                    <div class="bg-slate-800 rounded-lg p-4"><p class="text-gray-400 text-sm">Staff</p><p class="font-mono text-sm">${db.staffRole || '—'}</p></div>
-                    <div class="bg-slate-800 rounded-lg p-4"><p class="text-gray-400 text-sm">Auto-Rôle</p><p class="font-mono text-sm">${db.autoRole || '—'}</p></div>
-                </div>
-            </div>
-        `;
+            </div>`;
         res.send(htmlTemplate('Configuration', content, true));
     });
-    
-    // ===== PAGE : À PROPOS =====
-    app.get('/about', (req, res) => {
-        const token = req.query.token || '';
-        if (token !== ADMIN_PASSWORD) return res.redirect('/login');
-        
+
+    // ===== À PROPOS =====
+    app.get('/about', requireAuth, (req, res) => {
         const content = `
             <div class="max-w-4xl mx-auto">
                 <div class="mb-8 text-center">
                     <i class="fa-solid fa-cube text-purple-400 text-6xl mb-4"></i>
                     <h1 class="text-4xl font-bold mb-2">Orinstone Panel</h1>
-                    <p class="text-gray-400">Panel de gestion pour votre bot Discord</p>
                 </div>
-                
-                <div class="glass rounded-xl p-8 mb-6">
+                <div class="glass rounded-xl p-8">
                     <h2 class="text-2xl font-bold mb-4"><i class="fa-solid fa-info-circle text-blue-400"></i> Informations</h2>
                     <div class="space-y-2">
                         <p><span class="text-gray-400">Version :</span> <span class="font-mono">1.0.0</span></p>
                         <p><span class="text-gray-400">Node.js :</span> <span class="font-mono">${process.version}</span></p>
                         <p><span class="text-gray-400">Port Panel :</span> <span class="font-mono">${WEB_PORT}</span></p>
-                        <p><span class="text-gray-400">URL :</span> <span class="font-mono">http://node.orinstone.deepstone.fr:${WEB_PORT}</span></p>
                     </div>
                 </div>
-                
-                <div class="glass rounded-xl p-8">
-                    <h2 class="text-2xl font-bold mb-4"><i class="fa-solid fa-shield-halved text-green-400"></i> Sécurité</h2>
-                    <p class="text-gray-300 mb-4">
-                        ⚠️ Le panel est actuellement en <strong class="text-yellow-400">HTTP</strong>. 
-                        Pensez à configurer Nginx avec un certificat SSL (Let's Encrypt) pour activer HTTPS.
-                    </p>
-                    <div class="bg-slate-800 rounded-lg p-4 font-mono text-sm">
-                        <p class="text-gray-400"># Exemple de config Nginx</p>
-                        <p>server {</p>
-                        <p class="pl-4">listen 443 ssl;</p>
-                        <p class="pl-4">server_name node.orinstone.deepstone.fr;</p>
-                        <p class="pl-4">location / { proxy_pass http://localhost:${WEB_PORT}; }</p>
-                        <p>}</p>
-                    </div>
-                </div>
-            </div>
-        `;
+            </div>`;
         res.send(htmlTemplate('À propos', content, true));
     });
-    
-    // ===== API : ÉTAT GLOBAL =====
+
+    // ===== API STATUS =====
     app.get('/api/status', (req, res) => {
         res.json({
             success: true,
             features: Database.get('features') || {},
-            config: {
-                xpMessage: Database.get('xpMessage'),
-                xpVoice: Database.get('xpVoice'),
-                xpMessageCooldown: Database.get('xpMessageCooldown'),
-                maxLevel: Database.get('maxLevel')
-            }
+            config: { xpMessage: Database.get('xpMessage'), xpVoice: Database.get('xpVoice') }
         });
     });
-    
-    // Redirection root
-    app.get('/', (req, res, next) => {
-        // La route "/" ci-dessus prend déjà en charge
-        next();
-    });
-    
-    // ===== DÉMARRAGE DU SERVEUR =====
+
+    // ✅ UNE SEULE ROUTE RACINE (plus de doublon)
+    // Le '/' est déjà géré ci-dessus avec requireAuth
+
+    // ===== DÉMARRAGE =====
     app.listen(WEB_PORT, '0.0.0.0', () => {
-        console.log(`🌐 Panel web démarré sur :`);
-        console.log(`   → http://node.orinstone.deepstone.fr:${WEB_PORT}`);
-        console.log(`   → Local: http://localhost:${WEB_PORT}`);
+        console.log(`🌐 Panel web démarré sur http://0.0.0.0:${WEB_PORT}`);
     });
 }
 
