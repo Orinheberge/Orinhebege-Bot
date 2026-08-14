@@ -1,40 +1,82 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const path = require('path');
-const config = require('../config.json');
+const cookieParser = require('cookie-parser'); // ✅ À installer
 const Database = require('./Database');
 const StatusChecker = require('./StatusChecker');
 
-const WEB_PORT = 26162;
+const WEB_PORT = parseInt(process.env.WEB_PORT) || 26162;
+const ADMIN_PASSWORD = process.env.PANEL_PASSWORD;
 
 function startWebServer(client) {
     const app = express();
+    
     app.use(bodyParser.json());
     app.use(bodyParser.urlencoded({ extended: true }));
-    
-    // Servir les assets CSS/JS et les pages HTML statiques
+    app.use(cookieParser()); // ✅ Parser les cookies
     app.use(express.static(path.join(__dirname, '..', 'public')));
 
-    const ADMIN_PASSWORD = config.panelPassword || "admin123";
+    // =============================================
+    // MIDDLEWARE AUTH UNIFIÉ (Cookie + Query + Header)
+    // =============================================
+    function isAuthenticated(req) {
+        // 1. Vérifier le cookie (prioritaire)
+        if (req.cookies?.panelToken === ADMIN_PASSWORD) return true;
+        // 2. Vérifier le header API
+        if (req.headers['x-panel-token'] === ADMIN_PASSWORD) return true;
+        // 3. Vérifier la query string (fallback)
+        if (req.query.token === ADMIN_PASSWORD) return true;
+        return false;
+    }
 
     // Middleware API Auth
     const authApi = (req, res, next) => {
-        const token = req.headers['x-panel-token'] || req.query.token;
-        if (token === ADMIN_PASSWORD) return next();
+        if (isAuthenticated(req)) return next();
         return res.status(401).json({ success: false, error: 'Non authentifié' });
     };
 
     // Middleware Page Auth
     const requireAuth = (req, res, next) => {
-        const token = req.query.token;
-        if (token === ADMIN_PASSWORD) return next();
-        return res.redirect('/login/'); // ✅ Redirection vers /login/
+        if (isAuthenticated(req)) {
+            // ✅ Si authentifié via query string, créer un cookie et rediriger proprement
+            if (req.query.token === ADMIN_PASSWORD && !req.cookies?.panelToken) {
+                res.cookie('panelToken', ADMIN_PASSWORD, {
+                    httpOnly: true,
+                    secure: false, // Mettre true si HTTPS
+                    sameSite: 'lax',
+                    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 jours
+                });
+                // Rediriger vers la même URL sans le token apparent
+                const cleanUrl = req.path;
+                return res.redirect(cleanUrl);
+            }
+            return next();
+        }
+        return res.redirect('/login/');
     };
 
-    // --- API ROUTES ---
+    // =============================================
+    // API ROUTES
+    // =============================================
+    
     app.post('/api/login', (req, res) => {
-        if (req.body.password === ADMIN_PASSWORD) return res.json({ success: true, token: ADMIN_PASSWORD });
+        if (req.body.password === ADMIN_PASSWORD) {
+            // ✅ Créer un cookie sécurisé à la connexion
+            res.cookie('panelToken', ADMIN_PASSWORD, {
+                httpOnly: true,
+                secure: false, // Mettre true si HTTPS
+                sameSite: 'lax',
+                maxAge: 7 * 24 * 60 * 60 * 1000 // 7 jours
+            });
+            return res.json({ success: true, token: ADMIN_PASSWORD });
+        }
         return res.status(401).json({ success: false, error: 'Mot de passe incorrect' });
+    });
+
+    // ✅ Route déconnexion
+    app.get('/api/logout', (req, res) => {
+        res.clearCookie('panelToken');
+        res.redirect('/login/');
     });
 
     app.post('/api/feature', authApi, (req, res) => {
@@ -45,7 +87,7 @@ function startWebServer(client) {
         res.json({ success: true, feature, enabled: !!enabled });
     });
 
-    app.get('/api/status', async (req, res) => {
+    app.get('/api/status', authApi, async (req, res) => {
         const statuses = await StatusChecker.getAllStatus();
         res.json({ success: true, services: statuses, features: Database.get('features') });
     });
@@ -89,8 +131,11 @@ function startWebServer(client) {
         res.json({ success: true });
     });
 
-    // --- PAGE ROUTES ---
-    // ✅ Route login sans authentification
+    // =============================================
+    // PAGE ROUTES
+    // =============================================
+    
+    // Login (public)
     app.get('/login', (req, res) => 
         res.sendFile(path.join(__dirname, '..', 'public', 'login', 'index.html'))
     );
@@ -98,7 +143,7 @@ function startWebServer(client) {
         res.sendFile(path.join(__dirname, '..', 'public', 'login', 'index.html'))
     );
     
-    // ✅ Routes protégées
+    // Pages protégées
     app.get('/', requireAuth, (req, res) => 
         res.sendFile(path.join(__dirname, '..', 'public', 'index.html'))
     );
@@ -130,9 +175,7 @@ function startWebServer(client) {
 
     app.listen(WEB_PORT, '0.0.0.0', () => {
         console.log(`🌐 Panel web démarré sur http://0.0.0.0:${WEB_PORT}`);
-        console.log(`   → Login: http://localhost:${WEB_PORT}/login/`);
         console.log(`   → Login: https://hebergebot.deepstone.fr/login/`);
-        console.log(`   → Dashboard: http://localhost:${WEB_PORT}/`);
         console.log(`   → Dashboard: https://hebergebot.deepstone.fr/`);
     });
 }
