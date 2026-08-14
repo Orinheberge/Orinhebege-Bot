@@ -2,7 +2,7 @@ const fetch = require('node-fetch');
 
 const CLIENT_ID     = process.env.DISCORD_CLIENT_ID;
 const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
-const REDIRECT_URI  = `${process.env.PANEL_BASE_URL || 'http://localhost:26162'}/api/auth/callback`;
+const REDIRECT_URI  = `${process.env.PANEL_BASE_URL || 'http://node.orinstone.deepstone.fr:26162'}/api/auth/callback`;
 const ALLOWED_ROLES = (process.env.PANEL_ALLOWED_ROLES || '').split(',').map(r => r.trim()).filter(Boolean);
 const GUILD_ID      = process.env.DISCORD_GUILD_ID;
 

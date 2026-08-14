@@ -3,12 +3,16 @@
 // =============================================
 require('dotenv').config();
 
-const { Client, GatewayIntentBits, Partials, Collection } = require('discord.js');
+const {
+    Client, GatewayIntentBits, Partials, Collection,
+    EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
+    ModalBuilder, TextInputBuilder, TextInputStyle
+} = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 
 // =============================================
-// CONFIGURATION DEPUIS LES VARIABLES D'ENV
+// CONFIGURATION
 // =============================================
 const config = {
     token:         process.env.DISCORD_TOKEN,
@@ -19,22 +23,20 @@ const config = {
     webPort:       parseInt(process.env.WEB_PORT) || 26162
 };
 
-// Vérification des variables obligatoires au démarrage
 const requiredEnvVars = ['DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_GUILD_ID', 'PANEL_PASSWORD'];
 const missingVars = requiredEnvVars.filter(key => !process.env[key]);
 
 if (missingVars.length > 0) {
     console.error('❌ Variables d\'environnement manquantes :');
     missingVars.forEach(v => console.error(`   → ${v}`));
-    console.error('\n   Copiez .env.example vers .env et remplissez les valeurs.');
-    console.error('   Ou configurez-les dans votre panel d\'hébergement.\n');
+    console.error('\n   Copiez .env.example vers .env et remplissez les valeurs.\n');
     process.exit(1);
 }
 
 console.log('✅ Variables d\'environnement chargées');
 
 // =============================================
-// 1. INITIALISATION DU CLIENT DISCORD
+// 1. CLIENT DISCORD
 // =============================================
 const client = new Client({
     intents: [
@@ -54,14 +56,11 @@ const client = new Client({
     ]
 });
 
-// Collection pour stocker les commandes en mémoire
 client.commands = new Collection();
-
-// Exposer la config globalement sur le client (accessible partout via client.config)
 client.config = config;
 
 // =============================================
-// 2. GESTION DES ERREURS GLOBALES
+// 2. ERREURS GLOBALES
 // =============================================
 client.on('error', (error) => {
     console.error(`[DISCORD ERROR] ${error.message}`);
@@ -76,17 +75,12 @@ process.on('uncaughtException', (error) => {
 });
 
 // =============================================
-// CONSOLE DISCORD (via salon dédié)
+// 3. CONSOLE DISCORD (salon dédié)
 // =============================================
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-
 const CONSOLE_CHANNEL_ID = process.env.CONSOLE_CHANNEL_ID || null;
 const CONSOLE_OWNERS = (process.env.CONSOLE_OWNERS || '').split(',').map(id => id.trim()).filter(Boolean);
-
-// Sessions console : userId -> { channelId, messageId, history[] }
 const consoleSessions = new Map();
 
-// Commandes console
 const CONSOLE_COMMANDS = {
     help: {
         desc: 'Affiche cette aide',
@@ -123,7 +117,7 @@ const CONSOLE_COMMANDS = {
                 `├── 👥 Users: ${client.users.cache.size}`,
                 `├── 📝 Commands: ${client.commands.size}`,
                 `├── ⏱️ Uptime: ${d}j ${h}h ${m}m`,
-                `└──  Node: ${process.version}`
+                `└── 💻 Node: ${process.version}`
             ].join('\n');
         }
     },
@@ -139,7 +133,7 @@ const CONSOLE_COMMANDS = {
                 `├── 👥 Membres: ${totalMembers.toLocaleString()}`,
                 `├── 📝 Commands: ${client.commands.size}`,
                 `├── 🏓 Ping: ${client.ws.ping}ms`,
-                `├──  RSS: ${fmt(mem.rss)}`,
+                `├── 💾 RSS: ${fmt(mem.rss)}`,
                 `└── 💾 Heap: ${fmt(mem.heapUsed)}/${fmt(mem.heapTotal)}`
             ].join('\n');
         }
@@ -235,7 +229,11 @@ function buildConsoleEmbed(history = []) {
         embed.setDescription('```diff\n+ Console prête. Tapez "help".\n```');
     } else {
         const recent = history.slice(-8);
-        const lines = recent.map(e => e.type === 'input' ? `> ❯ ${e.content}` : (e.content.length > 300 ? e.content.substring(0, 300) + '...' : e.content));
+        const lines = recent.map(e =>
+            e.type === 'input'
+                ? `> ❯ ${e.content}`
+                : (e.content.length > 300 ? e.content.substring(0, 300) + '...' : e.content)
+        );
         const content = lines.join('\n');
         embed.setDescription(content.length > 3800 ? content.substring(content.length - 3800) : content);
     }
@@ -252,12 +250,11 @@ function buildConsoleButtons() {
 }
 
 function isConsoleOwner(userId) {
-    // Si CONSOLE_OWNERS est vide, utiliser les owners du config ou autoriser tout le monde sur le salon
     if (CONSOLE_OWNERS.length > 0) return CONSOLE_OWNERS.includes(userId);
-    return true; // Le salon lui-même est la protection
+    return true;
 }
 
-// Exposer sur le client pour accès depuis les events
+// Exposer sur le client
 client.consoleSessions = consoleSessions;
 client.executeConsoleCmd = executeConsoleCmd;
 client.buildConsoleEmbed = buildConsoleEmbed;
@@ -266,7 +263,7 @@ client.isConsoleOwner = isConsoleOwner;
 client.CONSOLE_CHANNEL_ID = CONSOLE_CHANNEL_ID;
 
 // =============================================
-// 3. CHARGEUR DYNAMIQUE D'ÉVÉNEMENTS
+// 4. CHARGEUR DYNAMIQUE D'ÉVÉNEMENTS
 // =============================================
 function loadEvents(dir) {
     const items = fs.readdirSync(dir, { withFileTypes: true });
@@ -279,9 +276,7 @@ function loadEvents(dir) {
             count += loadEvents(fullPath);
         } else if (item.name.endsWith('.js')) {
             try {
-                // Vider le cache pour éviter les problèmes en dev
                 delete require.cache[require.resolve(fullPath)];
-
                 const exported = require(fullPath);
                 const events = Array.isArray(exported) ? exported : [exported];
 
@@ -290,7 +285,6 @@ function loadEvents(dir) {
                         console.warn(`⚠️  Event invalide ignoré: ${fullPath}`);
                         continue;
                     }
-
                     if (event.once) {
                         client.once(event.name, (...args) => event.execute(...args, client));
                     } else {
@@ -307,7 +301,7 @@ function loadEvents(dir) {
 }
 
 // =============================================
-// 4. CHARGEUR DYNAMIQUE DE COMMANDES
+// 5. CHARGEUR DYNAMIQUE DE COMMANDES
 // =============================================
 function loadCommands(dir) {
     const items = fs.readdirSync(dir, { withFileTypes: true });
@@ -320,17 +314,13 @@ function loadCommands(dir) {
             count += loadCommands(fullPath);
         } else if (item.name.endsWith('.js')) {
             try {
-                // Vider le cache pour éviter les problèmes en dev
                 delete require.cache[require.resolve(fullPath)];
-
                 const command = require(fullPath);
 
                 if (!command.data || !command.execute) {
                     console.warn(`⚠️  Commande invalide ignorée: ${fullPath}`);
                     continue;
                 }
-
-                // Détection de doublons
                 if (client.commands.has(command.data.name)) {
                     console.error(`🔴 DOUBLON DÉTECTÉ: "${command.data.name}" dans ${fullPath}`);
                     continue;
@@ -347,10 +337,10 @@ function loadCommands(dir) {
 }
 
 // =============================================
-// 5. DÉMARRAGE
+// 6. DÉMARRAGE
 // =============================================
 async function start() {
-    console.log('\n🚀 Démarrage d\'Orinstone Bot v2.0...\n');
+    console.log('\n🚀 Démarrage d\'Orinstone Bot v2.1...\n');
 
     // Charger les événements
     const eventsPath = path.join(__dirname, 'events');
@@ -387,5 +377,4 @@ async function start() {
     }
 }
 
-// Lancer le bot
 start();
