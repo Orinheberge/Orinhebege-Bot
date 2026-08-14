@@ -262,6 +262,11 @@ client.buildConsoleButtons = buildConsoleButtons;
 client.isConsoleOwner = isConsoleOwner;
 client.CONSOLE_CHANNEL_ID = CONSOLE_CHANNEL_ID;
 
+// ✅ LOG DIAGNOSTIC CONSOLE
+console.log(`🖥️  Console Discord:`);
+console.log(`   → Salon: ${CONSOLE_CHANNEL_ID || '❌ NON CONFIGURÉ (CONSOLE_CHANNEL_ID manquant dans .env)'}`);
+console.log(`   → Owners: ${CONSOLE_OWNERS.length > 0 ? CONSOLE_OWNERS.join(', ') : '⚠️  Aucun (tout le monde autorisé)'}`);
+
 // =============================================
 // 4. CHARGEUR DYNAMIQUE D'ÉVÉNEMENTS
 // =============================================
