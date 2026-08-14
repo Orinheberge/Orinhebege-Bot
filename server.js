@@ -29,7 +29,6 @@ const requiredEnvVars = ['DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_GUILD_ID
 const missingVars = requiredEnvVars.filter(key => !process.env[key]);
 
 if (missingVars.length > 0) {
-    // Utiliser les console originaux car pas encore redirigés
     const _log = console.log;
     _log('❌ Variables d\'environnement manquantes :');
     missingVars.forEach(v => _log(`   → ${v}`));
@@ -46,7 +45,7 @@ const CONSOLE_OWNERS = (process.env.CONSOLE_OWNERS || '').split(',').map(id => i
 const logBuffer = [];
 let botReady = false;
 let consoleChannel = null;
-let isRedirecting = false; // Anti-boucle
+let isRedirecting = false;
 
 function getTimestamp() {
     return new Date().toLocaleString('fr-FR', {
@@ -56,28 +55,25 @@ function getTimestamp() {
     });
 }
 
-// Garder les fonctions console originales AVANT redirection
 const _consoleLog   = console.log.bind(console);
 const _consoleError = console.error.bind(console);
 const _consoleWarn  = console.warn.bind(console);
 
 async function sendLog(message, type = 'INFO') {
     const timestamp = getTimestamp();
-    const emojis = { INFO: 'ℹ️', SUCCESS: '✅', WARN: '⚠️', ERROR: '❌', STARTUP: '🚀', CONSOLE: '🖥️', PTERO: '🔌' };
+    const emojis = { INFO: 'ℹ️', SUCCESS: '✅', WARN: '⚠️', ERROR: '❌', STARTUP: '🚀', CONSOLE: '🖥️', PTERO: '🔌', DB: '🗄️' };
     const emoji = emojis[type] || 'ℹ️';
     const formatted = `[${timestamp}] ${emoji} [${type}] ${message}`;
 
-    // Terminal (toujours)
     if (type === 'ERROR') _consoleError(formatted);
     else if (type === 'WARN') _consoleWarn(formatted);
     else _consoleLog(formatted);
 
-    // Discord (si prêt)
     if (botReady && consoleChannel && !isRedirecting) {
         try {
             const truncated = formatted.length > 1900 ? formatted.substring(0, 1900) + '...' : formatted;
             await consoleChannel.send(`\`${truncated}\``);
-        } catch (e) { /* silencieux */ }
+        } catch (e) {}
     } else if (!botReady) {
         logBuffer.push({ message: formatted, type, ts: Date.now() });
         if (logBuffer.length > 50) logBuffer.shift();
@@ -94,7 +90,7 @@ async function sendEmbedLog(title, description, color = 0x2f3136, fields = []) {
             .setTimestamp();
         if (fields.length > 0) embed.addFields(fields);
         await consoleChannel.send({ embeds: [embed] });
-    } catch (e) { /* silencieux */ }
+    } catch (e) {}
 }
 
 async function flushLogBuffer() {
@@ -117,13 +113,12 @@ async function flushLogBuffer() {
     logBuffer.length = 0;
 }
 
-// Redirection console.log / error / warn
 console.log = (...args) => {
     _consoleLog(...args);
     if (isRedirecting) return;
     isRedirecting = true;
     const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
-    if (!msg.includes('[INFO]') && !msg.includes('[SUCCESS]') && !msg.includes('[STARTUP]') && !msg.includes('[CONSOLE]') && !msg.includes('[PTERO]')) {
+    if (!msg.includes('[INFO]') && !msg.includes('[SUCCESS]') && !msg.includes('[STARTUP]') && !msg.includes('[CONSOLE]') && !msg.includes('[PTERO]') && !msg.includes('[DB]')) {
         sendLog(msg, 'INFO').catch(() => {});
     }
     isRedirecting = false;
@@ -177,8 +172,14 @@ client.sendEmbedLog = sendEmbedLog;
 // 2. ERREURS GLOBALES
 // =============================================
 client.on('error', (error) => sendLog(`[DISCORD] ${error.message}`, 'ERROR'));
-process.on('unhandledRejection', (error) => sendLog(`[UNHANDLED REJECTION] ${error?.stack || error}`, 'ERROR'));
-process.on('uncaughtException', (error) => sendLog(`[UNCAUGHT EXCEPTION] ${error?.stack || error}`, 'ERROR'));
+
+process.on('unhandledRejection', (error) => {
+    sendLog(`[UNHANDLED REJECTION] ${error?.stack || error}`, 'ERROR');
+});
+
+process.on('uncaughtException', (error) => {
+    sendLog(`[UNCAUGHT EXCEPTION] ${error?.stack || error}`, 'ERROR');
+});
 
 // =============================================
 // 3. API PTERODACTYL
@@ -257,8 +258,6 @@ function checkPowerCooldown(userId) {
 }
 
 const CONSOLE_COMMANDS = {
-
-    // --- AIDE ---
     help: {
         desc: 'Affiche cette aide',
         execute: () => [
@@ -273,7 +272,7 @@ const CONSOLE_COMMANDS = {
             '║  guilds        → Liste serveurs          ║',
             '║  commands      → Slash commands          ║',
             '║  logs [n]      → Derniers logs buffer    ║',
-            '║  eval <code>   → Exécuter JS ⚠️         ║',
+            '║  eval <code>   → Exécuter JS ⚠️         ',
             '║  say <id> <msg>→ Message dans un salon  ║',
             '║  broadcast <msg>→ Message tous serveurs ║',
             '║                                          ║',
@@ -289,8 +288,6 @@ const CONSOLE_COMMANDS = {
             '╚══════════════════════════════════════════╝'
         ].join('\n')
     },
-
-    // --- STATUT ---
     status: {
         desc: 'Statut du bot',
         execute: () => {
@@ -309,8 +306,6 @@ const CONSOLE_COMMANDS = {
             ].join('\n');
         }
     },
-
-    // --- STATISTIQUES ---
     stats: {
         desc: 'Statistiques détaillées',
         execute: () => {
@@ -328,8 +323,6 @@ const CONSOLE_COMMANDS = {
             ].join('\n');
         }
     },
-
-    // --- UPTIME ---
     uptime: {
         desc: 'Temps de fonctionnement',
         execute: () => {
@@ -337,8 +330,6 @@ const CONSOLE_COMMANDS = {
             return `⏱️ ${Math.floor(u / 86400)}j ${Math.floor((u % 86400) / 3600)}h ${Math.floor((u % 3600) / 60)}m ${Math.floor(u % 60)}s`;
         }
     },
-
-    // --- MÉMOIRE ---
     memory: {
         desc: 'Usage mémoire',
         execute: () => {
@@ -347,8 +338,6 @@ const CONSOLE_COMMANDS = {
             return `💾 RSS: ${f(m.rss)} | Heap: ${f(m.heapUsed)}/${f(m.heapTotal)} | Ext: ${f(m.external)}`;
         }
     },
-
-    // --- SERVEURS ---
     guilds: {
         desc: 'Liste des serveurs',
         execute: () => {
@@ -356,8 +345,6 @@ const CONSOLE_COMMANDS = {
             return list.length ? list.join('\n') : 'Aucun serveur';
         }
     },
-
-    // --- COMMANDES SLASH ---
     commands: {
         desc: 'Liste slash commands',
         execute: () => {
@@ -365,8 +352,6 @@ const CONSOLE_COMMANDS = {
             return list.length ? list.join('\n') : 'Aucune commande';
         }
     },
-
-    // --- LOGS ---
     logs: {
         desc: 'Derniers logs du buffer',
         execute: (args) => {
@@ -377,11 +362,6 @@ const CONSOLE_COMMANDS = {
             return `\`\`\`\n${text.substring(0, 1800)}\n\`\`\``;
         }
     },
-
-    // =============================================
-    // COMMANDES PTERODACTYL
-    // =============================================
-
     ptero: {
         desc: 'Infos serveur Pterodactyl',
         execute: async () => {
@@ -390,22 +370,20 @@ const CONSOLE_COMMANDS = {
                 const [details, resources] = await Promise.all([PteroAPI.getDetails(), PteroAPI.getResources()]);
                 const d = details.data?.attributes || {};
                 const r = resources.data?.attributes?.resources || {};
-
                 const fmtB = (b) => {
                     if (!b || b === 0) return '0 MB';
                     if (b > 1073741824) return `${(b / 1073741824).toFixed(2)} GB`;
                     return `${(b / 1048576).toFixed(2)} MB`;
                 };
-
                 return [
                     '🔌 **Serveur Pterodactyl**',
-                    `├──  Nom: ${d.name || 'N/A'}`,
-                    `├── 🟢 État: ${r.current_state || 'N/A'}`,
+                    `├── 📛 Nom: ${d.name || 'N/A'}`,
+                    `├──  État: ${r.current_state || 'N/A'}`,
                     `├── 💾 Mémoire: ${fmtB(r.memory_bytes)} / ${d.limits?.memory ? d.limits.memory + ' MB' : '∞'}`,
                     `├── 💿 Disque: ${fmtB(r.disk_bytes)} / ${d.limits?.disk ? d.limits.disk + ' MB' : '∞'}`,
                     `├── 🔲 CPU: ${r.cpu_absolute?.toFixed(2) || 0}%`,
                     `├──  Réseau ↑: ${fmtB(r.network_tx_bytes)}`,
-                    `├── 🌐 Réseau ↓: ${fmtB(r.network_rx_bytes)}`,
+                    `├── 📥 Réseau ↓: ${fmtB(r.network_rx_bytes)}`,
                     `└── 🆔 UUID: ${d.uuid || 'N/A'}`
                 ].join('\n');
             } catch (e) {
@@ -413,58 +391,45 @@ const CONSOLE_COMMANDS = {
             }
         }
     },
-
     restart: {
         desc: 'Redémarrer via Pterodactyl',
         execute: async (args, userId) => {
             if (!PteroAPI.isConfigured()) return '❌ API Pterodactyl non configurée';
             const cd = checkPowerCooldown(userId);
             if (cd) return cd;
-
             sendLog(`[PTERO] Restart demandé par ${userId}`, 'PTERO');
             try {
                 await PteroAPI.restart();
                 return '🔄 **Restart envoyé via Pterodactyl !**\nLe bot va se couper et Pterodactyl le relancera.\n⏳ Délai: ~10-30 secondes';
-            } catch (e) {
-                return `❌ Erreur: ${e.message}`;
-            }
+            } catch (e) { return `❌ Erreur: ${e.message}`; }
         }
     },
-
     stop: {
         desc: 'Arrêter via Pterodactyl',
         execute: async (args, userId) => {
             if (!PteroAPI.isConfigured()) return '❌ API Pterodactyl non configurée';
             const cd = checkPowerCooldown(userId);
             if (cd) return cd;
-
             sendLog(`[PTERO] Stop demandé par ${userId}`, 'PTERO');
             try {
                 await PteroAPI.stop();
                 return '🛑 **Stop envoyé via Pterodactyl !**\nLe bot va s\'arrêter proprement.\n⚠️ Relancez manuellement depuis le panel Pterodactyl.';
-            } catch (e) {
-                return `❌ Erreur: ${e.message}`;
-            }
+            } catch (e) { return `❌ Erreur: ${e.message}`; }
         }
     },
-
     kill: {
         desc: 'Force kill via Pterodactyl',
         execute: async (args, userId) => {
             if (!PteroAPI.isConfigured()) return '❌ API Pterodactyl non configurée';
             const cd = checkPowerCooldown(userId);
             if (cd) return cd;
-
             sendLog(`[PTERO] Kill demandé par ${userId}`, 'ERROR');
             try {
                 await PteroAPI.kill();
                 return '💀 **Force kill envoyé via Pterodactyl !**\n⚠️ Processus tué brutalement. Risque de corruption.\nÀ utiliser en dernier recours uniquement.';
-            } catch (e) {
-                return `❌ Erreur: ${e.message}`;
-            }
+            } catch (e) { return `❌ Erreur: ${e.message}`; }
         }
     },
-
     cmd: {
         desc: 'Commande terminal Pterodactyl',
         execute: async (args) => {
@@ -475,16 +440,9 @@ const CONSOLE_COMMANDS = {
                 await PteroAPI.sendCmd(command);
                 sendLog(`[PTERO] Commande envoyée: ${command}`, 'PTERO');
                 return `✅ Commande envoyée au terminal:\n\`\`\`\n${command}\n\`\`\``;
-            } catch (e) {
-                return `❌ Erreur: ${e.message}`;
-            }
+            } catch (e) { return `❌ Erreur: ${e.message}`; }
         }
     },
-
-    // =============================================
-    // AUTRES COMMANDES
-    // =============================================
-
     eval: {
         desc: 'Exécuter du JavaScript ⚠️',
         execute: async (args) => {
@@ -494,12 +452,9 @@ const CONSOLE_COMMANDS = {
                 const result = await eval(code);
                 const out = typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result);
                 return `✅\n\`\`\`js\n${out.substring(0, 1800)}\n\`\`\``;
-            } catch (e) {
-                return `❌\n\`\`\`\n${e.message}\n\`\`\``;
-            }
+            } catch (e) { return `❌\n\`\`\`\n${e.message}\n\`\`\``; }
         }
     },
-
     say: {
         desc: 'Envoyer un message dans un salon',
         execute: async (args) => {
@@ -512,7 +467,6 @@ const CONSOLE_COMMANDS = {
             } catch (e) { return `❌ ${e.message}`; }
         }
     },
-
     broadcast: {
         desc: 'Message sur tous les serveurs',
         execute: async (args) => {
@@ -528,12 +482,9 @@ const CONSOLE_COMMANDS = {
             return `📢 Envoyé sur **${sent}**/${client.guilds.cache.size} serveurs`;
         }
     },
-
     clear: { desc: 'Effacer la console', execute: () => '__CLEAR__' },
     close: { desc: 'Fermer la console', execute: () => '__CLOSE__' }
 };
-
-// --- Fonctions console ---
 
 async function executeConsoleCmd(input, userId) {
     const parts = input.trim().split(/\s+/);
@@ -587,7 +538,6 @@ function isConsoleOwner(userId) {
     return true;
 }
 
-// Exposer sur le client
 client.consoleSessions = consoleSessions;
 client.executeConsoleCmd = executeConsoleCmd;
 client.buildConsoleEmbed = buildConsoleEmbed;
@@ -665,7 +615,29 @@ function loadCommands(dir) {
 }
 
 // =============================================
-// 7. ÉVÉNEMENT READY
+// 7. ARRÊT PROPRE (SIGINT / SIGTERM)
+// =============================================
+async function gracefulShutdown(signal) {
+    sendLog(`Arrêt demandé (${signal})`, 'WARN');
+    try {
+        const Database = require('./managers/Database');
+        await Database.close();
+        sendLog('Base de données fermée proprement', 'SUCCESS');
+    } catch (e) {
+        sendLog(`Erreur fermeture DB: ${e.message}`, 'ERROR');
+    }
+    try {
+        client.destroy();
+        sendLog('Client Discord déconnecté', 'SUCCESS');
+    } catch (e) {}
+    process.exit(0);
+}
+
+process.on('SIGINT',  () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+// =============================================
+// 8. ÉVÉNEMENT READY
 // =============================================
 client.once('clientReady', async () => {
     sendLog(`Bot connecté: ${client.user.tag}`, 'SUCCESS');
@@ -676,7 +648,6 @@ client.once('clientReady', async () => {
             botReady = true;
             sendLog(`Salon console: #${consoleChannel.name}`, 'SUCCESS');
 
-            // Embed de démarrage
             const uptime = process.uptime();
             const embed = new EmbedBuilder()
                 .setTitle('🚀 Bot Démarré')
@@ -690,7 +661,8 @@ client.once('clientReady', async () => {
                     { name: '📝 Commandes', value: `${client.commands.size}`, inline: true },
                     { name: '💻 Node.js', value: process.version, inline: true },
                     { name: '📦 discord.js', value: `v${require('discord.js').version}`, inline: true },
-                    { name: '🔌 Pterodactyl', value: PteroAPI.isConfigured() ? '🟢 Connecté' : '🔴 Non configuré', inline: true }
+                    { name: '🔌 Pterodactyl', value: PteroAPI.isConfigured() ? '🟢 Connecté' : '🔴 Non configuré', inline: true },
+                    { name: '🗄️ Base de données', value: '🟢 Initialisée', inline: true }
                 )
                 .setTimestamp()
                 .setFooter({ text: 'Orinstone Bot v2.2' });
@@ -708,10 +680,19 @@ client.once('clientReady', async () => {
 });
 
 // =============================================
-// 8. DÉMARRAGE
+// 9. DÉMARRAGE
 // =============================================
 async function start() {
     sendLog('Démarrage Orinstone Bot v2.2...', 'STARTUP');
+
+    // Base de données (JSON + MySQL)
+    try {
+        const Database = require('./managers/Database');
+        await Database.init();
+        sendLog('Base de données initialisée (JSON + MySQL)', 'DB');
+    } catch (error) {
+        sendLog(`Erreur initialisation DB: ${error.message}`, 'ERROR');
+    }
 
     // Événements
     const eventsPath = path.join(__dirname, 'events');
@@ -721,25 +702,6 @@ async function start() {
     } else {
         sendLog('Dossier events/ introuvable', 'WARN');
     }
-
-    const Database = require('./managers/Database');
-    await Database.init();
-    sendLog('Base de données initialisée (JSON + MySQL)', 'SUCCESS');
-
-
-    process.on('SIGINT', async () => {
-    sendLog('Arrêt demandé (SIGINT)', 'WARN');
-    const Database = require('./managers/Database');
-    await Database.close();
-    process.exit(0);
-    });
-
-    process.on('SIGTERM', async () => {
-        sendLog('Arrêt demandé (SIGTERM)', 'WARN');
-        const Database = require('./managers/Database');
-        await Database.close();
-        process.exit(0);
-    });
 
     // Commandes
     const commandsPath = path.join(__dirname, 'commands');
