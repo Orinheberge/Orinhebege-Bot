@@ -6,7 +6,7 @@ const Database = require('./Database');
 const StatusChecker = require('./StatusChecker');
 
 const WEB_PORT = parseInt(process.env.WEB_PORT) || 26162;
-const ADMIN_PASSWORD = process.env.PANEL_PASSWORD || require('./config.json').panelPassword;
+const ADMIN_PASSWORD = process.env.PANEL_PASSWORD ;
 
 function startWebServer(client) {
     const app = express();

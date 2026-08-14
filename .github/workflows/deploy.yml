@@ -4,13 +4,25 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
   contents: write
 
+# =============================================
+# VARIABLES GLOBALES
+# =============================================
+env:
+  DEPLOY_PATH: /var/lib/pterodactyl/volumes/8e4cb01d-97ad-42f7-a9c8-9e21c859d26b
+  SSH_HOST: 5.48.143.126
+  SSH_USER: root
+
 jobs:
+  # =============================================
+  # JOB 1 : DÉPLOIEMENT SUR PTERODACTYL
+  # =============================================
   deploy:
-    name: Deploy to Pterodactyl
+    name: 🚀 Deploy to Pterodactyl
     runs-on: ubuntu-latest
     outputs:
       commit_sha: ${{ steps.vars.outputs.sha }}
@@ -26,20 +38,39 @@ jobs:
         id: vars
         run: |
           echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-          # Échapper les caractères spéciaux pour éviter de casser le output
-          MSG=$(git log -1 --pretty=%s)
+          MSG=$(git log -1 --pretty=%s | sed 's/"/\\"/g')
           echo "msg=${MSG}" >> $GITHUB_OUTPUT
 
       - name: Install rsync & sshpass
         run: sudo apt-get update && sudo apt-get install -y rsync sshpass
 
-      - name: Deploy via rsync
+      # --- Vérification des secrets requis ---
+      - name: Check required secrets
+        run: |
+          MISSING=""
+          [ -z "${{ secrets.SSH_PASSWORD }}" ] && MISSING="$MISSING SSH_PASSWORD"
+          [ -z "${{ secrets.DISCORD_TOKEN }}" ] && MISSING="$MISSING DISCORD_TOKEN"
+          [ -z "${{ secrets.DISCORD_CLIENT_ID }}" ] && MISSING="$MISSING DISCORD_CLIENT_ID"
+          [ -z "${{ secrets.DISCORD_GUILD_ID }}" ] && MISSING="$MISSING DISCORD_GUILD_ID"
+          [ -z "${{ secrets.PANEL_PASSWORD }}" ] && MISSING="$MISSING PANEL_PASSWORD"
+          [ -z "${{ secrets.PTERO_API_KEY }}" ] && MISSING="$MISSING PTERO_API_KEY"
+          [ -z "${{ secrets.PTERO_SERVER_ID }}" ] && MISSING="$MISSING PTERO_SERVER_ID"
+          if [ -n "$MISSING" ]; then
+            echo "❌ Secrets manquants :$MISSING"
+            exit 1
+          fi
+          echo "✅ Tous les secrets requis sont présents"
+
+      # --- Déploiement des fichiers via rsync ---
+      - name: Deploy files via rsync
         env:
           SSH_PASS: ${{ secrets.SSH_PASSWORD }}
         run: |
           sshpass -p "$SSH_PASS" rsync -avz --delete \
             --exclude='.git/' \
+            --exclude='.github/' \
             --exclude='.env' \
+            --exclude='.env.example' \
             --exclude='node_modules/' \
             --exclude='*.log' \
             --exclude='database.json' \
@@ -47,42 +78,67 @@ jobs:
             --exclude='levels.json' \
             --exclude='reglement.json' \
             --exclude='config.json' \
+            --exclude='.gitignore' \
+            --exclude='README.md' \
             -e "ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10" \
             ./ \
-            root@5.48.143.126:/var/lib/pterodactyl/volumes/8e4cb01d-97ad-42f7-a9c8-9e21c859d26b/
+            ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/
 
-      - name: Post-deploy (npm install, permissions, restart bot)
+      # --- Post-déploiement : .env + npm + permissions + restart ---
+      - name: Post-deploy (env, npm, permissions, restart)
         env:
           SSH_PASS: ${{ secrets.SSH_PASSWORD }}
           PTERO_API_KEY: ${{ secrets.PTERO_API_KEY }}
           PTERO_SERVER_ID: ${{ secrets.PTERO_SERVER_ID }}
         run: |
-          # Installation des dépendances et permissions
           sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no \
-            root@5.48.143.126 bash -s <<'REMOTE'
-          cd /var/lib/pterodactyl/volumes/8e4cb01d-97ad-42f7-a9c8-9e21c859d26b
+            ${{ env.SSH_USER }}@${{ env.SSH_HOST }} bash -s <<'REMOTE'
           
+          cd ${{ env.DEPLOY_PATH }}
+          
+          # === Vérification package.json ===
           if [ ! -f "package.json" ]; then
               echo "❌ package.json introuvable !"
               exit 1
           fi
           
+          # === Création du fichier .env depuis les secrets ===
+          cat > .env << 'ENVEOF'
+          DISCORD_TOKEN=${{ secrets.DISCORD_TOKEN }}
+          DISCORD_CLIENT_ID=${{ secrets.DISCORD_CLIENT_ID }}
+          DISCORD_GUILD_ID=${{ secrets.DISCORD_GUILD_ID }}
+          BOT_PREFIX=${{ secrets.BOT_PREFIX || '!' }}
+          PANEL_PASSWORD=${{ secrets.PANEL_PASSWORD }}
+          WEB_PORT=${{ secrets.WEB_PORT || '26162' }}
+          ENVEOF
+          
+          chmod 600 .env
+          echo "✅ .env créé et sécurisé (chmod 600)"
+          
+          # === Installation des dépendances ===
+          echo "📦 Installation des dépendances..."
           npm ci --omit=dev --no-audit --no-fund 2>/dev/null || npm install --omit=dev --no-audit --no-fund
+          echo "✅ Dépendances installées"
           
-          chown -R 1000:1000 /var/lib/pterodactyl/volumes/8e4cb01d-97ad-42f7-a9c8-9e21c859d26b
-          chmod -R 755 /var/lib/pterodactyl/volumes/8e4cb01d-97ad-42f7-a9c8-9e21c859d26b
+          # === Permissions ===
+          chown -R 1000:1000 ${{ env.DEPLOY_PATH }}
+          chmod -R 755 ${{ env.DEPLOY_PATH }}
           
-          for f in database.json warns.json levels.json config.json; do
+          # Protéger les fichiers de données
+          for f in database.json warns.json levels.json reglement.json .env; do
               if [ -f "$f" ]; then
                   chmod 644 "$f"
                   echo "✅ $f protégé"
               fi
           done
           
+          # .env en lecture seule pour le owner
+          chmod 600 .env
+          
           echo "✅ Déploiement des fichiers terminé"
           REMOTE
 
-          # Redémarrer le serveur via l'API Pterodactyl
+          # === Redémarrage via API Pterodactyl ===
           echo "🔄 Redémarrage du serveur Pterodactyl..."
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
             -X POST \
@@ -95,25 +151,43 @@ jobs:
               echo "✅ Serveur redémarré avec succès (HTTP $HTTP_CODE)"
           else
               echo "⚠️ Réponse API Pterodactyl: HTTP $HTTP_CODE"
-              echo "Tentative de restart via SSH..."
+              echo "🔄 Tentative de restart via SSH..."
               sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no \
-                root@5.48.143.126 bash -s <<'REMOTE_SSH'
-              CONTAINER_ID=$(docker ps --filter "label=com.docker.compose.project=pterodactyl" \
-                --format "{{.ID}}" | head -1)
+                ${{ env.SSH_USER }}@${{ env.SSH_HOST }} bash -s <<'REMOTE_SSH'
+              
+              # Trouver le conteneur Pterodactyl du bot
+              CONTAINER_ID=$(docker ps \
+                --filter "name=8e4cb01d" \
+                --format "{{.ID}}" 2>/dev/null | head -1)
+              
+              if [ -z "$CONTAINER_ID" ]; then
+                  # Fallback : chercher par volume
+                  CONTAINER_ID=$(docker ps \
+                    --format "{{.ID}} {{.Mounts}}" \
+                    | grep "8e4cb01d" \
+                    | awk '{print $1}' \
+                    | head -1)
+              fi
               
               if [ -n "$CONTAINER_ID" ]; then
-                  docker exec "$CONTAINER_ID" pkill -f "node.*bot\|node.*server\|node.*index" 2>/dev/null || true
-                  echo "✅ Processus node arrêté dans le conteneur (watchdog Pterodactyl)"
+                  echo "📦 Conteneur trouvé: $CONTAINER_ID"
+                  docker exec "$CONTAINER_ID" pkill -f "node" 2>/dev/null || true
+                  echo "✅ Processus node arrêté (watchdog Pterodactyl va relancer)"
               else
-                  echo "⚠️ Conteneur non trouvé, vérifiez manuellement"
+                  echo "⚠️ Conteneur non trouvé automatiquement"
+                  echo "   Vérifiez manuellement sur le panel Pterodactyl"
               fi
-          REMOTE_SSH
+              REMOTE_SSH
           fi
 
+  # =============================================
+  # JOB 2 : CRÉATION DE LA RELEASE
+  # =============================================
   release_and_notify:
-    name: Create Release
+    name: 📦 Create Release
     needs: deploy
     runs-on: ubuntu-latest
+    if: needs.deploy.result == 'success'
     outputs:
       new_tag: ${{ steps.tag_version.outputs.new_tag }}
       previous_tag: ${{ steps.tag_version.outputs.previous_tag }}
@@ -126,10 +200,11 @@ jobs:
 
       - name: Bump version and create Tag
         id: tag_version
-        uses: mathieudutour/github-tag-action@v6.1
+        uses: mathieudutour/github-tag-action@v6.2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           tag_prefix: "v"
+          default_bump: "patch"
 
       - name: Generate Changelog
         id: changelog
@@ -137,13 +212,17 @@ jobs:
           PREV_TAG="${{ steps.tag_version.outputs.previous_tag }}"
           NEW_TAG="${{ steps.tag_version.outputs.new_tag }}"
           
-          if [ -z "$PREV_TAG" ]; then
-            LOG=$(git log HEAD --pretty=format:"- %s (%h)" --reverse)
+          if [ -z "$PREV_TAG" ] || [ "$PREV_TAG" = "null" ]; then
+            LOG=$(git log HEAD --pretty=format:"- %s (%h)" --reverse | tail -20)
           else
             LOG=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%h)" --reverse)
           fi
           
-          # Sauvegarder le changelog dans un output multiligne
+          # Si pas de commits, message par défaut
+          if [ -z "$LOG" ]; then
+            LOG="- Mise à jour automatique"
+          fi
+          
           {
             echo 'changelog<<EOF'
             echo "$LOG"
@@ -154,42 +233,67 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag_version.outputs.new_tag }}
-          name: Release ${{ steps.tag_version.outputs.new_tag }}
+          name: "Release ${{ steps.tag_version.outputs.new_tag }}"
           body: |
-            ## 🤖 Déploiement Bot Discord
-
-            **Version:** `${{ steps.tag_version.outputs.new_tag }}`
-            **Commit:** `${{ needs.deploy.outputs.commit_sha }}`
-            **Message:** ${{ needs.deploy.outputs.commit_msg }}
-
-            ### 📋 Changelog récent :
+            ## 🤖 Déploiement Bot Discord Orinstone
+            
+            | Info | Valeur |
+            |------|--------|
+            | **Version** | `${{ steps.tag_version.outputs.new_tag }}` |
+            | **Commit** | `${{ needs.deploy.outputs.commit_sha }}` |
+            | **Message** | ${{ needs.deploy.outputs.commit_msg }} |
+            | **Acteur** | @${{ github.actor }} |
+            
+            ### 📋 Changelog
             ${{ steps.changelog.outputs.changelog }}
-
+            
             ### 🎯 Cible
-            Volume Pterodactyl: `8e4cb01d-97ad-42f7-a9c8-9e21c859d26b`
+            - **Volume:** `8e4cb01d-97ad-42f7-a9c8-9e21c859d26b`
+            - **Panel:** https://panel.orinstone.deepstone.fr
+            
+            ---
+            *Déploiement automatique via GitHub Actions*
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # =============================================
+  # JOB 3 : NOTIFICATION DISCORD
+  # =============================================
   notify:
-    name: Notify Discord
+    name: 💬 Notify Discord
     runs-on: ubuntu-latest
     needs: [deploy, release_and_notify]
     if: always()
 
     steps:
+      - name: Determine status
+        id: status
+        run: |
+          if [ "${{ needs.deploy.result }}" = "success" ]; then
+            echo "color=2263842" >> $GITHUB_OUTPUT
+            echo "emoji=✅" >> $GITHUB_OUTPUT
+            echo "title=Déploiement réussi" >> $GITHUB_OUTPUT
+          else
+            echo "color=15548997" >> $GITHUB_OUTPUT
+            echo "emoji=❌" >> $GITHUB_OUTPUT
+            echo "title=Échec du déploiement" >> $GITHUB_OUTPUT
+          fi
+
       - name: Discord Notification
         uses: sarisia/actions-status-discord@v1
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
           status: ${{ needs.deploy.result }}
-          title: "${{ needs.deploy.result == 'success' && '✅ Déploiement réussi' || '❌ Échec déploiement' }}"
+          title: "${{ steps.status.outputs.emoji }} ${{ steps.status.outputs.title }}"
           description: |
             <@&1521937325595037906>
-            **Version:** ${{ needs.release_and_notify.outputs.new_tag }}
-            **Commit:** `${{ needs.deploy.outputs.commit_sha }}`
-            **Message:** ${{ needs.deploy.outputs.commit_msg }}
+            **Version:** ${{ needs.release_and_notify.outputs.new_tag || 'N/A' }}
+            **Commit:** `${{ needs.deploy.outputs.commit_sha || 'N/A' }}`
+            **Message:** ${{ needs.deploy.outputs.commit_msg || 'N/A' }}
             **Acteur:** ${{ github.actor }}
-          color: ${{ needs.deploy.result == 'success' && 2263842 || 15548997 }}
+          color: ${{ steps.status.outputs.color }}
           url: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          username: "Orinstone CI/CD"
+          avatar_url: "https://heberge.deepstone.fr/favicon.ico"
