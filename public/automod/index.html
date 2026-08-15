@@ -17,28 +17,29 @@
 <div id="notification" class="hidden fixed top-20 right-6 z-50 px-6 py-3 rounded-lg shadow-lg text-white"></div>
 
 <!-- Navbar -->
-<nav class="glass sticky top-0 z-40 px-6 py-4 flex justify-between items-center">
-    <div class="flex items-center gap-3">
-        <i class="fa-solid fa-cube text-purple-400 text-2xl"></i>
-        <span class="font-bold text-xl hidden sm:inline">Orinstone Panel</span>
-    </div>
-    <div class="flex gap-3 items-center text-sm">
-        <a href="/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-house mr-1"></i><span class="hidden md:inline"> Accueil</span></a>
-        <a href="/features/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-sliders mr-1"></i><span class="hidden md:inline"> Features</span></a>
-        <a href="/automod/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-shield-halved mr-1"></i><span class="hidden md:inline"> AutoMod</span></a>
-        <a href="/status/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-signal mr-1"></i><span class="hidden md:inline"> Statuts</span></a>
-        <a href="/config/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-gear mr-1"></i><span class="hidden md:inline"> Config</span></a>
-        <a href="/console/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-terminal mr-1"></i><span class="hidden md:inline"> Console</span></a>
-        <a href="/about/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-circle-info mr-1"></i><span class="hidden md:inline"> À propos</span></a>
-        <div id="userNav" class="hidden items-center gap-2 glass-light rounded-lg px-3 py-1.5 ml-2">
-            <img id="userAvatar" src="" alt="" class="w-6 h-6 rounded-full">
-            <span id="userName" class="text-xs text-gray-300 hidden lg:inline max-w-[100px] truncate"></span>
+   <nav class="glass sticky top-0 z-40 px-6 py-4 flex justify-between items-center">
+        <div class="flex items-center gap-3">
+            <i class="fa-solid fa-cube text-purple-400 text-2xl"></i>
+            <span class="font-bold text-xl hidden sm:inline">Orinstone Panel</span>
         </div>
-        <button onclick="logout()" class="bg-red-500/80 hover:bg-red-600 px-3 py-2 rounded-lg transition text-xs font-medium ml-1">
-            <i class="fa-solid fa-right-from-bracket"></i>
-        </button>
-    </div>
-</nav>
+        <div class="flex gap-3 items-center text-sm">
+            <a href="/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-house mr-1"></i><span class="hidden md:inline"> Accueil</span></a>
+            <a href="/features/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-sliders mr-1"></i><span class="hidden md:inline"> Features</span></a>
+            <a href="/automod/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-shield-halved mr-1"></i><span class="hidden md:inline"> AutoMod</span></a>
+            <a href="/bump/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-arrow-up mr-1"></i><span class="hidden md:inline"> Bump</span></a>
+            <a href="/status/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-signal mr-1"></i><span class="hidden md:inline"> Statuts</span></a>
+            <a href="/config/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-gear mr-1"></i><span class="hidden md:inline"> Config</span></a>
+            <a href="/console/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-terminal mr-1"></i><span class="hidden md:inline"> Console</span></a>
+            <a href="/about/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-circle-info mr-1"></i><span class="hidden md:inline"> À propos</span></a>
+            <div id="userNav" class="hidden items-center gap-2 glass-light rounded-lg px-3 py-1.5 ml-2">
+                <img id="userAvatar" src="" alt="" class="w-6 h-6 rounded-full">
+                <span id="userName" class="text-xs text-gray-300 hidden lg:inline max-w-[100px] truncate"></span>
+            </div>
+            <button onclick="logout()" class="bg-red-500/80 hover:bg-red-600 px-3 py-2 rounded-lg transition text-xs font-medium ml-1">
+                <i class="fa-solid fa-right-from-bracket"></i>
+            </button>
+        </div>
+    </nav>
 
     <div class="container mx-auto px-6 py-8">
         <!-- Header + Toggle Global -->

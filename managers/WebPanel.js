@@ -4,6 +4,7 @@ const cookieParser = require('cookie-parser');
 const path = require('path');
 const http = require('http');
 const Database = require('./Database');
+const BumpManager = require('./BumpManager');
 const StatusChecker = require('./StatusChecker');
 const WebConsole = require('./WebConsole');
 const DiscordAuth = require('./DiscordAuth');
@@ -13,6 +14,7 @@ const ADMIN_PASSWORD = process.env.PANEL_PASSWORD;
 
 function startWebServer(client) {
     const app = express();
+    BumpManager.initTables().catch(() => {});
 
     app.use(bodyParser.json());
     app.use(bodyParser.urlencoded({ extended: true }));
@@ -74,6 +76,54 @@ function startWebServer(client) {
 
     // Nettoyage périodique des sessions expirées
     setInterval(() => DiscordAuth.cleanupSessions(), 30 * 60 * 1000);
+
+
+
+    app.get('/api/bump/info', authApi, async (req, res) => {
+    try {
+        const guildId = req.query.guildId || config.guildId;
+        const userId = req.userSession?.user?.id || req.query.userId || 'web';
+        const info = await BumpManager.getBumpInfo(guildId, userId);
+        res.json({ success: true, ...info });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+    });
+
+    app.post('/api/bump', authApi, async (req, res) => {
+    try {
+        const guildId = req.body.guildId || config.guildId;
+        const userId = req.userSession?.user?.id || req.body.userId || 'web';
+
+        const result = await BumpManager.doBump(guildId, userId, client);
+
+        if (result.allowed) {
+            console.log(`[PANEL] Bump effectué par ${userId} pour le serveur ${guildId}`);
+        }
+
+        res.json({ success: result.allowed, ...result });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// === GET Stats bump ===
+app.get('/api/bump/stats', authApi, async (req, res) => {
+    try {
+        const guildId = req.query.guildId || config.guildId;
+        const totalBumps = await BumpManager.getTotalBumps(guildId);
+        const lastBump = await BumpManager.getLastBump(guildId);
+
+        res.json({
+            success: true,
+            totalBumps,
+            lastBump,
+            cooldownDuration: BUMP_COOLDOWN
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
 
     // Étape 1 : Redirection vers Discord
     app.get('/api/auth/login', (req, res) => {
@@ -268,6 +318,11 @@ function startWebServer(client) {
         res.sendFile(path.join(__dirname, '..', 'public', 'console', 'index.html'))
     );
     app.get('/console/', requireAuth, (req, res) => res.redirect('/console'));
+
+    app.get('/bump', requireAuth, (req, res) =>
+    res.sendFile(path.join(__dirname, '..', 'public', 'bump', 'index.html'))
+);
+app.get('/bump/', requireAuth, (req, res) => res.redirect('/bump'));
 
     // =============================================
     // SERVEUR HTTP + WEBSOCKET

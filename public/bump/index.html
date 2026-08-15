@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bump - Orinstone Panel</title>
+    <link rel="shortcut icon" href="https://heberge.deepstone.fr/favicon.ico" type="image/x-icon">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <style>
+        @keyframes bumpPulse {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(87, 242, 135, 0.4); }
+            50% { transform: scale(1.05); box-shadow: 0 0 30px 10px rgba(87, 242, 135, 0.2); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(87, 242, 135, 0); }
+        }
+        .bump-animate { animation: bumpPulse 0.6s ease-out; }
+
+        @keyframes confetti {
+            0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(-200px) rotate(720deg); opacity: 0; }
+        }
+        .confetti-particle {
+            position: absolute;
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            animation: confetti 1s ease-out forwards;
+        }
+
+        @keyframes countdownPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .countdown-pulse { animation: countdownPulse 2s ease-in-out infinite; }
+
+        .progress-ring { transition: stroke-dashoffset 0.5s ease; }
+    </style>
+</head>
+<body class="text-white">
+    <div id="notification" class="hidden fixed top-20 right-6 z-50 px-6 py-3 rounded-lg shadow-lg text-white"></div>
+
+    <!-- Navbar -->
+   <nav class="glass sticky top-0 z-40 px-6 py-4 flex justify-between items-center">
+        <div class="flex items-center gap-3">
+            <i class="fa-solid fa-cube text-purple-400 text-2xl"></i>
+            <span class="font-bold text-xl hidden sm:inline">Orinstone Panel</span>
+        </div>
+        <div class="flex gap-3 items-center text-sm">
+            <a href="/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-house mr-1"></i><span class="hidden md:inline"> Accueil</span></a>
+            <a href="/features/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-sliders mr-1"></i><span class="hidden md:inline"> Features</span></a>
+            <a href="/automod/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-shield-halved mr-1"></i><span class="hidden md:inline"> AutoMod</span></a>
+            <a href="/bump/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-arrow-up mr-1"></i><span class="hidden md:inline"> Bump</span></a>
+            <a href="/status/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-signal mr-1"></i><span class="hidden md:inline"> Statuts</span></a>
+            <a href="/config/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-gear mr-1"></i><span class="hidden md:inline"> Config</span></a>
+            <a href="/console/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-terminal mr-1"></i><span class="hidden md:inline"> Console</span></a>
+            <a href="/about/" class="nav-link text-gray-300 hover:text-white transition"><i class="fa-solid fa-circle-info mr-1"></i><span class="hidden md:inline"> À propos</span></a>
+            <div id="userNav" class="hidden items-center gap-2 glass-light rounded-lg px-3 py-1.5 ml-2">
+                <img id="userAvatar" src="" alt="" class="w-6 h-6 rounded-full">
+                <span id="userName" class="text-xs text-gray-300 hidden lg:inline max-w-[100px] truncate"></span>
+            </div>
+            <button onclick="logout()" class="bg-red-500/80 hover:bg-red-600 px-3 py-2 rounded-lg transition text-xs font-medium ml-1">
+                <i class="fa-solid fa-right-from-bracket"></i>
+            </button>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-6 py-8">
+
+        <!-- Header -->
+        <div class="mb-8 fade-in text-center">
+            <h1 class="text-4xl font-bold mb-2"><i class="fa-solid fa-arrow-up text-green-400 mr-2"></i>Bump</h1>
+            <p class="text-gray-400">Boostez la visibilité de votre serveur</p>
+        </div>
+
+        <!-- Carte principale -->
+        <div class="max-w-2xl mx-auto">
+
+            <!-- Stats -->
+            <div class="grid grid-cols-3 gap-4 mb-8 fade-in fade-in-delay-1">
+                <div class="glass rounded-xl p-5 text-center card-hover">
+                    <div class="bg-green-500/20 p-3 rounded-xl inline-block mb-2">
+                        <i class="fa-solid fa-arrow-up text-green-400 text-xl"></i>
+                    </div>
+                    <p class="text-3xl font-bold text-green-400" id="totalBumps">--</p>
+                    <p class="text-gray-400 text-xs mt-1">Total bumps</p>
+                </div>
+                <div class="glass rounded-xl p-5 text-center card-hover">
+                    <div class="bg-blue-500/20 p-3 rounded-xl inline-block mb-2">
+                        <i class="fa-solid fa-clock text-blue-400 text-xl"></i>
+                    </div>
+                    <p class="text-3xl font-bold text-blue-400" id="lastBumpTime">--</p>
+                    <p class="text-gray-400 text-xs mt-1">Dernier bump</p>
+                </div>
+                <div class="glass rounded-xl p-5 text-center card-hover">
+                    <div class="bg-purple-500/20 p-3 rounded-xl inline-block mb-2">
+                        <i class="fa-solid fa-hourglass-half text-purple-400 text-xl"></i>
+                    </div>
+                    <p class="text-3xl font-bold text-purple-400" id="cooldownDisplay">--</p>
+                    <p class="text-gray-400 text-xs mt-1">Cooldown</p>
+                </div>
+            </div>
+
+            <!-- Bouton Bump -->
+            <div class="glass rounded-2xl p-8 text-center fade-in fade-in-delay-2 relative overflow-hidden" id="bumpCard">
+                <!-- Confettis container -->
+                <div id="confettiContainer" class="absolute inset-0 pointer-events-none"></div>
+
+                <!-- Anneau de progression -->
+                <div class="relative inline-block mb-6">
+                    <svg class="w-40 h-40 transform -rotate-90" viewBox="0 0 120 120">
+                        <circle cx="60" cy="60" r="54" fill="none" stroke="#1e293b" stroke-width="8"/>
+                        <circle id="progressRing" cx="60" cy="60" r="54" fill="none" stroke="#57F287" stroke-width="8"
+                            stroke-dasharray="339.292" stroke-dashoffset="339.292" stroke-linecap="round" class="progress-ring"/>
+                    </svg>
+                    <div class="absolute inset-0 flex items-center justify-center">
+                        <i class="fa-solid fa-arrow-up text-4xl text-green-400" id="bumpIcon"></i>
+                    </div>
+                </div>
+
+                <!-- Countdown -->
+                <div id="countdownSection" class="hidden mb-6">
+                    <p class="text-gray-400 text-sm mb-2">Prochain bump disponible dans</p>
+                    <p class="text-4xl font-bold text-yellow-400 countdown-pulse font-mono" id="countdownTimer">--:--:--</p>
+                </div>
+
+                <!-- Bouton -->
+                <button id="bumpBtn" onclick="doBump()" disabled
+                    class="relative bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed px-12 py-4 rounded-2xl font-bold text-xl transition-all duration-300 transform hover:scale-105 disabled:hover:scale-100 shadow-lg shadow-green-500/20 disabled:shadow-none">
+                    <i class="fa-solid fa-arrow-up mr-2"></i>
+                    <span id="bumpBtnText">Chargement...</span>
+                </button>
+
+                <p class="text-gray-500 text-xs mt-4" id="bumpHint">
+                    <i class="fa-solid fa-info-circle mr-1"></i>
+                    Cooldown de <span id="cooldownHours">2</span>h entre chaque bump
+                </p>
+            </div>
+
+            <!-- Historique récent -->
+            <div class="glass rounded-xl p-6 mt-8 fade-in fade-in-delay-3">
+                <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-history text-yellow-400"></i> Informations
+                </h2>
+                <div class="space-y-3 text-sm">
+                    <div class="flex justify-between items-center bg-slate-800/50 rounded-lg px-4 py-3">
+                        <span class="text-gray-400"><i class="fa-solid fa-arrow-up text-green-400 mr-2"></i>Qu'est-ce qu'un bump ?</span>
+                    </div>
+                    <p class="text-gray-400 px-2">
+                        Le bump permet d'augmenter la visibilité de votre serveur. Chaque bump est enregistré et un message est envoyé dans le salon dédié sur Discord.
+                    </p>
+                    <div class="flex justify-between items-center bg-slate-800/50 rounded-lg px-4 py-3">
+                        <span class="text-gray-400"><i class="fa-solid fa-clock text-blue-400 mr-2"></i>Cooldown</span>
+                        <span class="text-white font-mono" id="cooldownInfo">2h</span>
+                    </div>
+                    <div class="flex justify-between items-center bg-slate-800/50 rounded-lg px-4 py-3">
+                        <span class="text-gray-400"><i class="fa-solid fa-bullhorn text-purple-400 mr-2"></i>Notification Discord</span>
+                        <span class="text-green-400">✅ Automatique</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="glass mt-12 py-6 text-center text-gray-500 text-sm">
+        <p>&copy; 2026 Orinstone Network</p>
+    </footer>
+
+    <script src="/assets/js/script.js"></script>
+    <script>
+        let cooldownInterval = null;
+        let bumpData = null;
+
+        // =============================================
+        // CHARGEMENT DES INFOS
+        // =============================================
+        async function loadBumpInfo() {
+            try {
+                const res = await Panel.api('/api/bump/info');
+                bumpData = res;
+
+                // Stats
+                document.getElementById('totalBumps').textContent = res.totalBumps || 0;
+
+                // Dernier bump
+                if (res.lastBump) {
+                    const date = new Date(res.lastBump);
+                    const now = new Date();
+                    const diff = now - date;
+                    if (diff < 60000) document.getElementById('lastBumpTime').textContent = 'À l\'instant';
+                    else if (diff < 3600000) document.getElementById('lastBumpTime').textContent = `${Math.floor(diff / 60000)}min`;
+                    else if (diff < 86400000) document.getElementById('lastBumpTime').textContent = `${Math.floor(diff / 3600000)}h`;
+                    else document.getElementById('lastBumpTime').textContent = date.toLocaleDateString('fr-FR');
+                } else {
+                    document.getElementById('lastBumpTime').textContent = 'Jamais';
+                }
+
+                // Cooldown
+                const cooldownHours = Math.floor((res.cooldownDuration || 7200000) / 3600000);
+                document.getElementById('cooldownHours').textContent = cooldownHours;
+                document.getElementById('cooldownInfo').textContent = `${cooldownHours}h`;
+
+                if (res.canBump) {
+                    enableBump();
+                } else {
+                    disableBump(res.cooldownRemaining);
+                }
+
+            } catch (e) {
+                console.error('Erreur chargement bump:', e);
+                document.getElementById('bumpBtnText').textContent = 'Erreur';
+                document.getElementById('bumpBtn').disabled = true;
+            }
+        }
+
+        // =============================================
+        // ÉTAT DU BOUTON
+        // =============================================
+        function enableBump() {
+            const btn = document.getElementById('bumpBtn');
+            btn.disabled = false;
+            document.getElementById('bumpBtnText').textContent = 'Bumper le serveur';
+            document.getElementById('countdownSection').classList.add('hidden');
+            document.getElementById('bumpIcon').className = 'fa-solid fa-arrow-up text-4xl text-green-400';
+
+            // Anneau complet
+            const ring = document.getElementById('progressRing');
+            ring.style.strokeDashoffset = '0';
+            ring.style.stroke = '#57F287';
+
+            // Cooldown display
+            document.getElementById('cooldownDisplay').textContent = 'Prêt !';
+            document.getElementById('cooldownDisplay').className = 'text-3xl font-bold text-green-400';
+
+            if (cooldownInterval) { clearInterval(cooldownInterval); cooldownInterval = null; }
+        }
+
+        function disableBump(remainingMs) {
+            const btn = document.getElementById('bumpBtn');
+            btn.disabled = true;
+            document.getElementById('bumpBtnText').textContent = 'En cooldown';
+            document.getElementById('countdownSection').classList.remove('hidden');
+            document.getElementById('bumpIcon').className = 'fa-solid fa-lock text-4xl text-yellow-400';
+
+            const totalCooldown = bumpData?.cooldownDuration || 7200000;
+
+            function updateCountdown() {
+                const now = Date.now();
+                const target = now + remainingMs;
+                const diff = target - now;
+
+                if (diff <= 0) {
+                    enableBump();
+                    return;
+                }
+
+                remainingMs = diff;
+
+                const h = Math.floor(diff / 3600000);
+                const m = Math.floor((diff % 3600000) / 60000);
+                const s = Math.floor((diff % 60000) / 1000);
+
+                document.getElementById('countdownTimer').textContent =
+                    `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+
+                document.getElementById('cooldownDisplay').textContent = `${h}h ${m}m`;
+                document.getElementById('cooldownDisplay').className = 'text-3xl font-bold text-yellow-400';
+
+                // Anneau de progression
+                const progress = 1 - (diff / totalCooldown);
+                const circumference = 339.292;
+                const offset = circumference * (1 - progress);
+                const ring = document.getElementById('progressRing');
+                ring.style.strokeDashoffset = offset;
+                ring.style.stroke = '#f59e0b';
+            }
+
+            updateCountdown();
+            cooldownInterval = setInterval(updateCountdown, 1000);
+        }
+
+        // =============================================
+        // EXÉCUTER LE BUMP
+        // =============================================
+        async function doBump() {
+            const btn = document.getElementById('bumpBtn');
+            btn.disabled = true;
+            document.getElementById('bumpBtnText').textContent = 'Bump en cours...';
+
+            try {
+                const res = await Panel.api('/api/bump', {
+                    method: 'POST',
+                    body: JSON.stringify({})
+                });
+
+                if (res.success || res.allowed) {
+                    // Succès !
+                    showConfetti();
+                    document.getElementById('bumpCard').classList.add('bump-animate');
+                    setTimeout(() => document.getElementById('bumpCard').classList.remove('bump-animate'), 600);
+
+                    Panel.notify('✅ Bump enregistré avec succès !', 'success');
+
+                    // Mettre à jour les stats
+                    const totalEl = document.getElementById('totalBumps');
+                    totalEl.textContent = parseInt(totalEl.textContent) + 1;
+
+                    document.getElementById('lastBumpTime').textContent = 'À l\'instant';
+
+                    // Activer le cooldown
+                    const cooldown = res.nextBump ? res.nextBump - Date.now() : (bumpData?.cooldownDuration || 7200000);
+                    disableBump(cooldown);
+
+                } else {
+                    Panel.notify(res.message || 'Cooldown actif', 'warning');
+                    if (res.remaining) disableBump(res.remaining);
+                    else enableBump();
+                }
+
+            } catch (e) {
+                Panel.notify('Erreur lors du bump', 'error');
+                enableBump();
+            }
+        }
+
+        // =============================================
+        // CONFETTIS
+        // =============================================
+        function showConfetti() {
+            const container = document.getElementById('confettiContainer');
+            const colors = ['#57F287', '#5865F2', '#FEE75C', '#EB459E', '#ED4245', '#FFFFFF'];
+
+            for (let i = 0; i < 30; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'confetti-particle';
+                particle.style.left = Math.random() * 100 + '%';
+                particle.style.top = 60 + Math.random() * 30 + '%';
+                particle.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                particle.style.animationDelay = Math.random() * 0.5 + 's';
+                particle.style.animationDuration = 0.5 + Math.random() * 1 + 's';
+                container.appendChild(particle);
+
+                setTimeout(() => particle.remove(), 2000);
+            }
+        }
+
+        // =============================================
+        // INIT
+        // =============================================
+        loadBumpInfo();
+    </script>
+</body>
+</html>
