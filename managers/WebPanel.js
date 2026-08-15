@@ -11,10 +11,11 @@ const DiscordAuth = require('./DiscordAuth');
 
 const WEB_PORT = parseInt(process.env.WEB_PORT) || 26162;
 const ADMIN_PASSWORD = process.env.PANEL_PASSWORD;
+const GUILD_ID = process.env.DISCORD_GUILD_ID;
+const BUMP_COOLDOWN = parseInt(process.env.BUMP_COOLDOWN) || 7200000;
 
 function startWebServer(client) {
     const app = express();
-    BumpManager.initTables().catch(() => {});
 
     app.use(bodyParser.json());
     app.use(bodyParser.urlencoded({ extended: true }));
@@ -25,7 +26,6 @@ function startWebServer(client) {
     // AUTHENTIFICATION
     // =============================================
 
-    // Ancien système (mot de passe)
     function isAuthenticated(req) {
         if (req.cookies?.panelToken === ADMIN_PASSWORD) return true;
         if (req.headers['x-panel-token'] === ADMIN_PASSWORD) return true;
@@ -33,29 +33,23 @@ function startWebServer(client) {
         return false;
     }
 
-    // Système unifié : Discord OAuth2 + fallback mot de passe
     function isFullyAuthenticated(req) {
-        // 1. Vérifier session Discord OAuth2
         const sessionToken = req.cookies?.panelSession;
         const session = DiscordAuth.verifySession(sessionToken);
         if (session) {
             req.userSession = session;
             return true;
         }
-        // 2. Fallback ancien système mot de passe
         return isAuthenticated(req);
     }
 
-    // Middleware API (JSON 401)
     const authApi = (req, res, next) => {
         if (isFullyAuthenticated(req)) return next();
         return res.status(401).json({ success: false, error: 'Non authentifié' });
     };
 
-    // Middleware Pages (redirect vers login)
     const requireAuth = (req, res, next) => {
         if (isFullyAuthenticated(req)) {
-            // Si authentifié via query string, créer cookie et rediriger proprement
             if (req.query.token === ADMIN_PASSWORD && !req.cookies?.panelToken && !req.cookies?.panelSession) {
                 res.cookie('panelToken', ADMIN_PASSWORD, {
                     httpOnly: true,
@@ -71,61 +65,11 @@ function startWebServer(client) {
     };
 
     // =============================================
-    // DISCORD OAUTH2 ROUTES
+    // DISCORD OAUTH2
     // =============================================
 
-    // Nettoyage périodique des sessions expirées
     setInterval(() => DiscordAuth.cleanupSessions(), 30 * 60 * 1000);
 
-
-
-    app.get('/api/bump/info', authApi, async (req, res) => {
-    try {
-        const guildId = req.query.guildId || config.guildId;
-        const userId = req.userSession?.user?.id || req.query.userId || 'web';
-        const info = await BumpManager.getBumpInfo(guildId, userId);
-        res.json({ success: true, ...info });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
-    });
-
-    app.post('/api/bump', authApi, async (req, res) => {
-    try {
-        const guildId = req.body.guildId || config.guildId;
-        const userId = req.userSession?.user?.id || req.body.userId || 'web';
-
-        const result = await BumpManager.doBump(guildId, userId, client);
-
-        if (result.allowed) {
-            console.log(`[PANEL] Bump effectué par ${userId} pour le serveur ${guildId}`);
-        }
-
-        res.json({ success: result.allowed, ...result });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
-});
-
-// === GET Stats bump ===
-app.get('/api/bump/stats', authApi, async (req, res) => {
-    try {
-        const guildId = req.query.guildId || config.guildId;
-        const totalBumps = await BumpManager.getTotalBumps(guildId);
-        const lastBump = await BumpManager.getLastBump(guildId);
-
-        res.json({
-            success: true,
-            totalBumps,
-            lastBump,
-            cooldownDuration: BUMP_COOLDOWN
-        });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
-});
-
-    // Étape 1 : Redirection vers Discord
     app.get('/api/auth/login', (req, res) => {
         try {
             const url = DiscordAuth.getAuthorizationUrl();
@@ -136,7 +80,6 @@ app.get('/api/bump/stats', authApi, async (req, res) => {
         }
     });
 
-    // Étape 2 : Callback Discord
     app.get('/api/auth/callback', async (req, res) => {
         const { code, state, error } = req.query;
 
@@ -154,9 +97,9 @@ app.get('/api/bump/stats', authApi, async (req, res) => {
 
             res.cookie('panelSession', sessionToken, {
                 httpOnly: true,
-                secure: false, // Mettre true si HTTPS avec certificat valide
+                secure: false,
                 sameSite: 'lax',
-                maxAge: 24 * 60 * 60 * 1000 // 24h
+                maxAge: 24 * 60 * 60 * 1000
             });
 
             console.log(`[AUTH] ✅ ${user.username} connecté au panel`);
@@ -168,7 +111,6 @@ app.get('/api/bump/stats', authApi, async (req, res) => {
         }
     });
 
-    // Déconnexion (nettoie les deux systèmes)
     app.get('/api/auth/logout', (req, res) => {
         const sessionToken = req.cookies?.panelSession;
         if (sessionToken) {
@@ -179,7 +121,6 @@ app.get('/api/bump/stats', authApi, async (req, res) => {
         res.redirect('/login/');
     });
 
-    // API : Infos utilisateur connecté
     app.get('/api/auth/me', authApi, (req, res) => {
         const session = req.userSession;
         if (session && session.user) {
@@ -190,7 +131,6 @@ app.get('/api/bump/stats', authApi, async (req, res) => {
                 guildMember: session.guildMember
             });
         }
-        // Fallback : utilisateur connecté via mot de passe
         return res.json({ success: true, user: null, avatar: null, guildMember: null });
     });
 
@@ -198,7 +138,6 @@ app.get('/api/bump/stats', authApi, async (req, res) => {
     // API ROUTES
     // =============================================
 
-    // Login mot de passe (fallback)
     app.post('/api/login', (req, res) => {
         if (req.body.password === ADMIN_PASSWORD) {
             res.cookie('panelToken', ADMIN_PASSWORD, {
@@ -212,7 +151,6 @@ app.get('/api/bump/stats', authApi, async (req, res) => {
         return res.status(401).json({ success: false, error: 'Mot de passe incorrect' });
     });
 
-    // Logout ancien système
     app.get('/api/logout', (req, res) => {
         res.clearCookie('panelToken');
         res.clearCookie('panelSession');
@@ -273,10 +211,63 @@ app.get('/api/bump/stats', authApi, async (req, res) => {
     });
 
     // =============================================
+    // API BUMP
+    // =============================================
+
+    BumpManager.initTables().catch(() => {});
+
+    app.get('/api/bump/info', authApi, async (req, res) => {
+        try {
+            const guildId = req.query.guildId || GUILD_ID;
+            const userId = req.userSession?.user?.id || req.query.userId || 'web';
+            const info = await BumpManager.getBumpInfo(guildId, userId);
+            res.json({ success: true, ...info });
+        } catch (err) {
+            console.error('[PANEL] Erreur bump info:', err.message);
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
+    app.post('/api/bump', authApi, async (req, res) => {
+        try {
+            const guildId = req.body.guildId || GUILD_ID;
+            const userId = req.userSession?.user?.id || req.body.userId || 'web';
+
+            const result = await BumpManager.doBump(guildId, userId, client);
+
+            if (result.allowed) {
+                console.log(`[PANEL] Bump effectué par ${userId} pour le serveur ${guildId}`);
+            }
+
+            res.json({ success: result.allowed, ...result });
+        } catch (err) {
+            console.error('[PANEL] Erreur bump:', err.message);
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
+    app.get('/api/bump/stats', authApi, async (req, res) => {
+        try {
+            const guildId = req.query.guildId || GUILD_ID;
+            const totalBumps = await BumpManager.getTotalBumps(guildId);
+            const lastBump = await BumpManager.getLastBump(guildId);
+
+            res.json({
+                success: true,
+                totalBumps,
+                lastBump,
+                cooldownDuration: BUMP_COOLDOWN
+            });
+        } catch (err) {
+            console.error('[PANEL] Erreur bump stats:', err.message);
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
+    // =============================================
     // PAGE ROUTES
     // =============================================
 
-    // Login (public - pas d'auth requise)
     app.get('/login', (req, res) =>
         res.sendFile(path.join(__dirname, '..', 'public', 'login', 'index.html'))
     );
@@ -284,7 +275,6 @@ app.get('/api/bump/stats', authApi, async (req, res) => {
         res.sendFile(path.join(__dirname, '..', 'public', 'login', 'index.html'))
     );
 
-    // Pages protégées
     app.get('/', requireAuth, (req, res) =>
         res.sendFile(path.join(__dirname, '..', 'public', 'index.html'))
     );
@@ -320,19 +310,17 @@ app.get('/api/bump/stats', authApi, async (req, res) => {
     app.get('/console/', requireAuth, (req, res) => res.redirect('/console'));
 
     app.get('/bump', requireAuth, (req, res) =>
-    res.sendFile(path.join(__dirname, '..', 'public', 'bump', 'index.html'))
-);
-app.get('/bump/', requireAuth, (req, res) => res.redirect('/bump'));
+        res.sendFile(path.join(__dirname, '..', 'public', 'bump', 'index.html'))
+    );
+    app.get('/bump/', requireAuth, (req, res) => res.redirect('/bump'));
 
     // =============================================
     // SERVEUR HTTP + WEBSOCKET
     // =============================================
     const server = http.createServer(app);
 
-    // Exposer le client Discord pour la console WebSocket
     global.discordClient = client;
 
-    // Initialiser la WebSocket Console
     try {
         WebConsole.init(server, ADMIN_PASSWORD);
     } catch (err) {

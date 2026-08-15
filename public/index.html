@@ -184,6 +184,7 @@
     </footer>
 
     <script src="/assets/js/script.js"></script>
+    <script src="/assets/js/script.js"></script>
     <script>
         (async () => {
             try {
@@ -209,6 +210,19 @@
                         el.innerHTML = '<span class="text-red-400">Inactif</span>';
                     }
                 } catch (e) {}
+
+                // === Latence API (mesure réelle) ===
+                try {
+                    const start = performance.now();
+                    await fetch('/api/status', { credentials: 'include' });
+                    const end = performance.now();
+                    const ping = Math.round(end - start);
+                    const pingEl = document.getElementById('pingValue');
+                    pingEl.textContent = `${ping} ms`;
+                    pingEl.className = `text-3xl font-bold ${ping < 200 ? 'text-green-400' : ping < 500 ? 'text-yellow-400' : 'text-red-400'}`;
+                } catch (e) {
+                    document.getElementById('pingValue').textContent = 'N/A';
+                }
 
                 // === Services hébergés ===
                 if (data.services && data.services.length > 0) {
@@ -236,6 +250,7 @@
                 console.error('Erreur chargement dashboard:', e);
                 document.getElementById('featuresCount').textContent = 'Erreur';
                 document.getElementById('automodStatus').textContent = 'Erreur';
+                document.getElementById('pingValue').textContent = 'N/A';
                 document.getElementById('servicesList').innerHTML = `
                     <div class="col-span-full text-center py-6 text-red-400 text-sm">
                         <i class="fa-solid fa-triangle-exclamation mr-2"></i>Impossible de charger les données.
