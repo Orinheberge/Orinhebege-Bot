@@ -152,16 +152,29 @@ async function handleTicketClose(interaction, client) {
 }
 
 async function handleStatusRefresh(interaction) {
+    // Important : deferReply pour éviter que Discord ne pense que le bot ne répond pas
     await interaction.deferReply({ ephemeral: true });
+
     try {
+        // 1. Récupérer les derniers statuts
         const statuses = await StatusChecker.getAllStatus();
         const embed = StatusChecker.createStatusEmbed(statuses);
         const buttons = StatusChecker.createStatusButtons();
-        await interaction.message.edit({ embeds: [embed], components: [buttons] });
-        await interaction.editReply('✅ Statut rafraîchi !');
+
+        // 2. Modifier le message original (celui sur lequel on a cliqué)
+        // interaction.message représente le message contenant le bouton
+        await interaction.message.edit({ 
+            embeds: [embed], 
+            components: [buttons] 
+        });
+
+        // 3. Confirmer à l'utilisateur (message visible uniquement par lui)
+        await interaction.editReply('✅ Statut rafraîchi avec succès !');
+
     } catch (error) {
-        Logger.console('error', `Refresh status: ${error.message}`, 'STATUS');
-        await interaction.editReply('❌ Erreur lors du rafraîchissement.');
+        console.error(`Erreur refresh status: ${error.message}`);
+        // Si l'édition échoue (ex: message trop vieux ou supprimé), on prévient l'utilisateur
+        await interaction.editReply('❌ Impossible de rafraîchir le statut (message peut-être supprimé).');
     }
 }
 

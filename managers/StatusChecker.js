@@ -76,8 +76,7 @@ class StatusChecker {
             new ButtonBuilder().setCustomId('refresh_status').setLabel('Rafraîchir').setEmoji('🔄').setStyle(ButtonStyle.Secondary)
         );
     }
-
-    static async updateStatusMessage(channel) {
+      static async updateStatusMessage(channel) {
         const statuses = await this.getAllStatus();
         const embed = this.createStatusEmbed(statuses);
         const buttons = this.createStatusButtons();
@@ -85,24 +84,25 @@ class StatusChecker {
 
         if (savedId) {
             try {
+                // On essaie de récupérer le message existant
                 const msg = await channel.messages.fetch(savedId);
-                if (msg && msg.author.id === channel.client.user.id) return await msg.edit({ embeds: [embed], components: [buttons] });
-            } catch (e) { Database.set('statusMessageId', null); }
+                
+                // Vérification de sécurité : on s'assure que c'est bien notre bot qui a envoyé le message
+                if (msg && msg.author.id === channel.client.user.id) {
+                    // MODIFICATION ICI : On édite le message existant
+                    await msg.edit({ embeds: [embed], components: [buttons] });
+                    return; // On s'arrête ici, pas besoin d'en créer un nouveau
+                }
+            } catch (e) {
+                // Si le message n'existe plus (erreur 404 ou autre), on continue pour en créer un nouveau
+                console.log("Ancien message de statut introuvable, création d'un nouveau...");
+                Database.set('statusMessageId', null); // On reset l'ID car il est invalide
+            }
         }
+
+        // Si aucun ID sauvegardé ou si l'ancien message était invalide, on envoie un NOUVEAU message
         const newMsg = await channel.send({ embeds: [embed], components: [buttons] });
         Database.set('statusMessageId', newMsg.id);
-    }
-
-    static startStatusInterval(client) {
-        setInterval(async () => {
-            if (!client.isReady() || !Database.isFeatureEnabled('statusServices')) return;
-            const channelId = Database.get('statusChannel');
-            if (!channelId) return;
-            const guild = client.guilds.cache.first();
-            const channel = guild?.channels.cache.get(channelId);
-            if (channel) await this.updateStatusMessage(channel).catch(console.error);
-        }, 5 * 60 * 1000);
-        console.log('✅ Système de statut des services démarré');
     }
 }
 
