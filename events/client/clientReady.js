@@ -46,7 +46,8 @@ module.exports = {
 
         // === Démarrage des systèmes périodiques ===
         LevelDB.startVoiceXPSystem(client);
-        StatusChecker.startStatusInterval(client);
+        const channel = await client.channels.fetch('ID_DU_CHANNEL_STATUT');
+        StatusChecker.startStatusInterval(channel, 5 * 60 * 1000);
         AutoMod.startCacheCleanup();
 
         // === Rotation du statut bot ===

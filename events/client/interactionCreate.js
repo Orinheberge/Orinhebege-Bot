@@ -58,6 +58,8 @@ module.exports = {
                 }
             }
         }
+
+          await StatusChecker.updateStatusMessage(channel);
     }
 };
 
