@@ -46,7 +46,7 @@ module.exports = {
 
         // === Démarrage des systèmes périodiques ===
         LevelDB.startVoiceXPSystem(client);
-        const channel = await client.channels.fetch('ID_DU_CHANNEL_STATUT');
+        const channel = await client.channels.fetch('1505013861932208221');
         StatusChecker.startStatusInterval(channel, 5 * 60 * 1000);
         AutoMod.startCacheCleanup();
 
