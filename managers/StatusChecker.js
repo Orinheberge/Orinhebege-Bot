@@ -76,7 +76,8 @@ class StatusChecker {
             new ButtonBuilder().setCustomId('refresh_status').setLabel('Rafraîchir').setEmoji('🔄').setStyle(ButtonStyle.Secondary)
         );
     }
-      static async updateStatusMessage(channel) {
+
+    static async updateStatusMessage(channel) {
         const statuses = await this.getAllStatus();
         const embed = this.createStatusEmbed(statuses);
         const buttons = this.createStatusButtons();
@@ -86,10 +87,10 @@ class StatusChecker {
             try {
                 // On essaie de récupérer le message existant
                 const msg = await channel.messages.fetch(savedId);
-                
+
                 // Vérification de sécurité : on s'assure que c'est bien notre bot qui a envoyé le message
                 if (msg && msg.author.id === channel.client.user.id) {
-                    // MODIFICATION ICI : On édite le message existant
+                    // On édite le message existant
                     await msg.edit({ embeds: [embed], components: [buttons] });
                     return; // On s'arrête ici, pas besoin d'en créer un nouveau
                 }
@@ -103,6 +104,42 @@ class StatusChecker {
         // Si aucun ID sauvegardé ou si l'ancien message était invalide, on envoie un NOUVEAU message
         const newMsg = await channel.send({ embeds: [embed], components: [buttons] });
         Database.set('statusMessageId', newMsg.id);
+    }
+
+    /**
+     * Démarre la mise à jour automatique périodique du message de statut.
+     * @param {import('discord.js').TextChannel} channel Le salon où poster/éditer le message
+     * @param {number} intervalMs L'intervalle en millisecondes entre chaque rafraîchissement
+     */
+    static startStatusInterval(channel, intervalMs = 5 * 60 * 1000) {
+        // On évite de démarrer plusieurs intervalles en parallèle si la fonction est appelée deux fois
+        if (this._intervalHandle) {
+            clearInterval(this._intervalHandle);
+        }
+
+        // Première mise à jour immédiate
+        this.updateStatusMessage(channel).catch(err => 
+            console.error('Erreur lors de la mise à jour initiale du statut :', err)
+        );
+
+        // Puis mise à jour périodique
+        this._intervalHandle = setInterval(() => {
+            this.updateStatusMessage(channel).catch(err => 
+                console.error('Erreur lors de la mise à jour périodique du statut :', err)
+            );
+        }, intervalMs);
+
+        return this._intervalHandle;
+    }
+
+    /**
+     * Arrête la mise à jour automatique périodique.
+     */
+    static stopStatusInterval() {
+        if (this._intervalHandle) {
+            clearInterval(this._intervalHandle);
+            this._intervalHandle = null;
+        }
     }
 }
 
