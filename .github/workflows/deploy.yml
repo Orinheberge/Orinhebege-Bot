@@ -114,19 +114,18 @@ jobs:
           BUMP_COOLDOWN=${{ secrets.BUMP_COOLDOWN || '7200000' }}
           ENVEOF"
 
-      # --- Étape 3 : npm install + permissions ---
-      - name: Install dependencies & set permissions
+      # --- Étape 3 : permissions ---
+      - name: Set permissions
         env:
           SSH_PASS: ${{ secrets.SSH_PASSWORD }}
         run: |
           sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no \
             ${{ env.SSH_USER }}@${{ env.SSH_HOST }} \
             "cd ${{ env.DEPLOY_PATH }} && \
-             npm ci --omit=dev --no-audit --no-fund 2>/dev/null || npm install --omit=dev --no-audit --no-fund && \
              chmod 600 .env && \
              chown -R 1000:1000 ${{ env.DEPLOY_PATH }} && \
              chmod -R 755 ${{ env.DEPLOY_PATH }} && \
-             echo '✅ Dépendances installées et permissions OK'"
+             echo '✅ Permissions OK'"
 
       # --- Étape 4 : Redémarrage via API Pterodactyl ---
       - name: Restart via Pterodactyl API
