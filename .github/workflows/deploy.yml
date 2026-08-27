@@ -96,9 +96,9 @@ jobs:
           DISCORD_GUILD_ID=${{ secrets.DISCORD_GUILD_ID }}
           BOT_PREFIX=${{ secrets.BOT_PREFIX || '!' }}
           PANEL_PASSWORD=${{ secrets.PANEL_PASSWORD }}
-          PANEL_BASE_URL=${{ secrets.PANEL_BASE_URL || 'https://node.orinstone.deepstone.fr:26162' }}
+          PANEL_BASE_URL=${{ secrets.PANEL_BASE_URL || 'https://node.orinstone.deepstone.fr:25616' }}
           PANEL_ALLOWED_ROLES=${{ secrets.PANEL_ALLOWED_ROLES || '' }}
-          WEB_PORT=${{ secrets.WEB_PORT || '26162' }}
+          WEB_PORT=${{ secrets.WEB_PORT || '25616' }}
           CONSOLE_CHANNEL_ID=${{ secrets.CONSOLE_CHANNEL_ID || '' }}
           CONSOLE_OWNERS=${{ secrets.CONSOLE_OWNERS || '' }}
           PTERO_API_KEY=${{ secrets.PTERO_API_KEY }}
